@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "audiosmith"
+version = "0.1.0"
+description = "CLI audio/video processing toolkit — dubbing, transcription, translation"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+    "click>=8.1",
+    "faster-whisper>=1.0.0",
+    "argostranslate>=1.9",
+    "chatterbox-tts",
+    "numpy>=1.24",
+    "soundfile>=0.12",
+    "yt-dlp>=2024.0.0",
+    "torch>=2.0",
+]
+
+[project.optional-dependencies]
+gemma = ["transformers>=4.40", "accelerate>=0.27", "bitsandbytes>=0.42"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0"]
+
+[project.scripts]
+audiosmith = "audiosmith.cli:cli"
+
+[tool.setuptools.packages.find]
+include = ["audiosmith*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: unit tests (no GPU, no network)",
+    "integration: integration tests (may need GPU)",
+    "slow: long-running tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
