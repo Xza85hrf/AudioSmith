@@ -82,3 +82,13 @@ class VocalIsolationError(ProcessingError):
 class ValidationError(ProcessingError):
     def __init__(self, message, error_code=None, details=None, original_error=None):
         super().__init__(message, error_code or "VALID_ERR", details, original_error)
+
+
+class DocumentFormattingError(ProcessingError):
+    def __init__(self, message, error_code=None, details=None, original_error=None):
+        super().__init__(message, error_code or "DOC_ERR", details, original_error)
+
+
+class BatchProcessingError(ProcessingError):
+    def __init__(self, message, error_code=None, details=None, original_error=None):
+        super().__init__(message, error_code or "BATCH_ERR", details, original_error)

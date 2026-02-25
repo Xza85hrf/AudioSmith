@@ -1,11 +1,13 @@
 """AudioSmith — CLI audio/video processing toolkit."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "audio_normalizer",
+    "batch_processor",
     "cli",
     "content_validator",
+    "document_formatter",
     "diarizer",
     "download",
     "emotion",
@@ -20,6 +22,7 @@ __all__ = [
     "mixer",
     "models",
     "multi_voice_tts",
+    "piper_tts",
     "pipeline",
     "progress",
     "punctuation_restorer",
@@ -29,6 +32,7 @@ __all__ = [
     "system_check",
     "tech_corrections",
     "transcribe",
+    "transcript_corrector",
     "transcription_post_processor",
     "vad",
     "vocal_isolator",
