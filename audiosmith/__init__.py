@@ -1,6 +1,6 @@
 """AudioSmith — CLI audio/video processing toolkit."""
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "audio_normalizer",
@@ -26,6 +26,7 @@ __all__ = [
     "pipeline",
     "progress",
     "punctuation_restorer",
+    "qwen3_tts",
     "retry",
     "srt",
     "srt_formatter",
