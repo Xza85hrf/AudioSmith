@@ -46,7 +46,11 @@ class TestDubbingStep:
         assert 'extract_audio' in steps
         assert 'transcribe' in steps
         assert 'encode_video' in steps
-        assert len(steps) == 6
+        assert 'isolate_vocals' in steps
+        assert 'diarize' in steps
+        assert 'detect_emotion' in steps
+        assert 'post_process' in steps
+        assert len(steps) == 10
 
 
 class TestPipelineState:

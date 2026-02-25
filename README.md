@@ -11,8 +11,13 @@ A CLI-first toolkit for high-quality audio and video dubbing, transcription, and
 - **Standalone transcription**: Output in SRT, VTT, TXT, or JSON
 - **Subtitle translation**: Offline via Argos or GPU-accelerated via TranslateGemma
 - **URL transcription**: Direct transcription of YouTube and other supported platforms via yt-dlp
-- **6-step pipeline with JSON checkpoint resume**: Resume interrupted jobs without reprocessing
+- **9-step pipeline with JSON checkpoint resume**: Resume interrupted jobs without reprocessing
 - **23-language TTS**: Multilingual speech synthesis via Chatterbox
+- **Speaker diarization**: Identify and label individual speakers (via PyAnnote Audio)
+- **Emotion detection**: Rule-based + optional ML emotion analysis for expressive TTS
+- **Vocal isolation**: Separate vocals from background audio (via Demucs)
+- **Multi-voice TTS**: Speaker-aware voice cloning with per-speaker voice prompts
+- **Broadcast-quality subtitles**: 42-char/line, word-level splitting, duration enforcement
 - **CLI-first**: No web UI; designed for automation and scripting
 
 ## Requirements
@@ -29,6 +34,11 @@ cd AudioSmith
 pip install -e ".[dev]"
 ```
 
+Optional quality features (speaker diarization, vocal isolation):
+```bash
+pip install -e ".[quality]"
+```
+
 Optional TranslateGemma support (requires CUDA):
 ```bash
 pip install -e ".[gemma]"
@@ -41,51 +51,70 @@ pip install -e ".[gemma]"
    audiosmith dub video.mp4 --target-lang pl
    ```
 
-2. Transcribe an audio file to SRT:
+2. Dub with full quality (vocal isolation + speaker diarization + emotion):
+   ```bash
+   audiosmith dub video.mp4 --target-lang pl --isolate-vocals --diarize --emotion
+   ```
+
+3. Transcribe an audio file to SRT:
    ```bash
    audiosmith transcribe audio.wav --output srt
    ```
 
-3. Translate subtitles to Spanish:
+4. Transcribe with vocal isolation and speaker labels:
+   ```bash
+   audiosmith transcribe audio.wav --output srt --isolate-vocals --diarize
+   ```
+
+5. Translate subtitles to Spanish:
    ```bash
    audiosmith translate subs.srt --target-lang es
    ```
 
-4. Transcribe a YouTube video to SRT:
+6. Transcribe a YouTube video to SRT:
    ```bash
    audiosmith transcribe-url "https://youtube.com/watch?v=..." --output srt
    ```
 
 ## Pipeline Architecture
 
-The dubbing pipeline consists of six sequential steps:
+The dubbing pipeline consists of up to nine steps (optional steps enabled via flags):
 
 ```
-Extract Audio → Transcribe → Translate → Generate TTS → Mix Audio → Encode Video
+Extract Audio → [Isolate Vocals] → Transcribe → [Diarize] → [Detect Emotion] → Translate → Generate TTS → Mix Audio → Encode Video
 ```
+
+Steps in brackets are optional and enabled with `--isolate-vocals`, `--diarize`, and `--emotion`. Without these flags, the pipeline runs the core 6 steps.
 
 Each step writes intermediate artifacts and a JSON checkpoint. Resume partial runs with:
 ```bash
 audiosmith dub video.mp4 --target-lang fr --resume
 ```
 
+See [docs/quality-features.md](docs/quality-features.md) for detailed documentation on quality features.
+
 ## Project Structure
 
 ```
 audiosmith/
-├── cli.py          # Click CLI (4 commands)
-├── pipeline.py     # 6-step dubbing orchestrator
-├── transcribe.py   # Faster-Whisper transcription
-├── translate.py    # Argos + TranslateGemma translation
-├── tts.py          # Chatterbox multilingual TTS
-├── mixer.py        # Audio scheduling & rendering
-├── ffmpeg.py       # FFmpeg audio/video operations
-├── download.py     # yt-dlp download & format helpers
-├── srt.py          # SRT parsing & writing
-├── models.py       # Data models & pipeline state
-├── exceptions.py   # Exception hierarchy
-├── error_codes.py  # Error code catalog
-└── log.py          # Logging setup
+├── cli.py              # Click CLI (4 commands)
+├── pipeline.py         # 9-step dubbing orchestrator
+├── transcribe.py       # Faster-Whisper transcription
+├── translate.py        # Argos + TranslateGemma translation
+├── tts.py              # Chatterbox multilingual TTS
+├── multi_voice_tts.py  # Speaker-aware multi-voice TTS
+├── diarizer.py         # Speaker diarization (PyAnnote)
+├── emotion.py          # Emotion detection engine
+├── vocal_isolator.py   # Vocal isolation (Demucs)
+├── srt_formatter.py    # Broadcast-quality SRT formatting
+├── mixer.py            # Audio scheduling & rendering
+├── ffmpeg.py           # FFmpeg audio/video operations
+├── download.py         # yt-dlp download & format helpers
+├── srt.py              # SRT parsing & writing
+├── models.py           # Data models & pipeline state
+├── exceptions.py       # Exception hierarchy
+├── error_codes.py      # Error code catalog
+└── log.py              # Logging setup
 ```
 
 ## Supported Languages
@@ -103,7 +132,7 @@ pip install -e ".[dev]"
 python -m pytest tests/ -v
 ```
 
-73 unit tests, ~10s runtime, no GPU required.
+153 unit tests, ~4s runtime, no GPU required.
 
 ## License
 

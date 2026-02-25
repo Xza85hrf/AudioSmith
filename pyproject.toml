@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=75.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "audiosmith"
-version = "0.1.0"
+version = "0.2.0"
 description = "CLI audio/video processing toolkit — dubbing, transcription, translation"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -13,15 +13,24 @@ dependencies = [
     "faster-whisper>=1.0.0",
     "argostranslate>=1.9",
     "chatterbox-tts",
-    "numpy>=1.24",
+    "numpy>=1.24,<3",
     "soundfile>=0.12",
     "yt-dlp>=2024.0.0",
     "torch>=2.0",
 ]
 
 [project.optional-dependencies]
+quality = ["pyannote-audio>=3.0", "demucs>=4.0"]
 gemma = ["transformers>=4.40", "accelerate>=0.27", "bitsandbytes>=0.42"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0"]
+ci = [
+    "click>=8.1",
+    "numpy>=1.24,<3",
+    "soundfile>=0.12",
+    "yt-dlp>=2024.0.0",
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
 
 [project.scripts]
 audiosmith = "audiosmith.cli:cli"
@@ -39,4 +48,18 @@ markers = [
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::UserWarning",
+]
+addopts = "--strict-markers"
+
+[tool.coverage.run]
+source = ["audiosmith"]
+omit = ["audiosmith/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
 ]

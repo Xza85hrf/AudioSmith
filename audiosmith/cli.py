@@ -24,7 +24,10 @@ def cli(verbose):
 @click.option('--source-lang', '-s', default='auto', help='Source language (auto-detect if omitted).')
 @click.option('--output-dir', '-o', default=None, help='Output directory.')
 @click.option('--resume', is_flag=True, help='Resume from checkpoint.')
-def dub(video, target_lang, source_lang, output_dir, resume):
+@click.option('--diarize', is_flag=True, help='Enable speaker diarization (requires pyannote-audio).')
+@click.option('--emotion', is_flag=True, help='Enable emotion detection for TTS enhancement.')
+@click.option('--isolate-vocals', is_flag=True, help='Isolate vocals before transcription (requires demucs).')
+def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, isolate_vocals):
     """Dub a video into another language."""
     from audiosmith.models import DubbingConfig
     from audiosmith.pipeline import DubbingPipeline
@@ -39,6 +42,9 @@ def dub(video, target_lang, source_lang, output_dir, resume):
             output_dir=Path(output_dir),
             source_language=source_lang,
             target_language=target_lang,
+            isolate_vocals=isolate_vocals,
+            diarize=diarize,
+            detect_emotion=emotion,
             resume=resume,
         )
         pipeline = DubbingPipeline(config)
@@ -58,24 +64,37 @@ def dub(video, target_lang, source_lang, output_dir, resume):
               help='Output format.')
 @click.option('--language', '-l', default=None, help='Audio language (auto-detect if omitted).')
 @click.option('--model', '-m', default='large-v3', help='Whisper model size.')
-def transcribe(audio, output, language, model):
+@click.option('--diarize', is_flag=True, help='Enable speaker diarization (requires pyannote-audio).')
+@click.option('--isolate-vocals', is_flag=True, help='Isolate vocals before transcription (requires demucs).')
+def transcribe(audio, output, language, model, diarize, isolate_vocals):
     """Transcribe an audio or video file."""
     from audiosmith.transcribe import Transcriber
 
     audio_path = Path(audio)
     try:
+        if isolate_vocals:
+            from audiosmith.vocal_isolator import VocalIsolator
+            vi = VocalIsolator()
+            paths = vi.isolate(audio_path)
+            vi.unload()
+            audio_path = paths['vocals_path']
+
+        diar_segments = None
+        if diarize:
+            from audiosmith.diarizer import Diarizer
+            d = Diarizer()
+            diar_segments = d.diarize(audio_path)
+            d.unload()
+
         t = Transcriber(model=model)
-        segments = t.transcribe(audio_path, language=language)
+        segments = t.transcribe(audio_path, language=language, diarization_segments=diar_segments)
         t.unload()
 
         out_path = audio_path.with_suffix(f'.{output}')
         if output == 'srt':
-            from audiosmith.srt import SRTEntry, write_srt, seconds_to_timestamp
-            entries = [
-                SRTEntry(index=i + 1, start_time=seconds_to_timestamp(s['start']),
-                         end_time=seconds_to_timestamp(s['end']), text=s['text'])
-                for i, s in enumerate(segments)
-            ]
+            from audiosmith.srt import write_srt
+            from audiosmith.srt_formatter import SRTFormatter
+            entries = SRTFormatter().format_segments(segments)
             write_srt(entries, out_path)
         elif output == 'txt':
             from audiosmith.download import segments_to_txt
@@ -147,12 +166,9 @@ def transcribe_url(url, output, language):
 
         out_path = Path(f'{slug}.{output}')
         if output == 'srt':
-            from audiosmith.srt import SRTEntry, write_srt, seconds_to_timestamp
-            entries = [
-                SRTEntry(index=i + 1, start_time=seconds_to_timestamp(s['start']),
-                         end_time=seconds_to_timestamp(s['end']), text=s['text'])
-                for i, s in enumerate(segments)
-            ]
+            from audiosmith.srt import write_srt
+            from audiosmith.srt_formatter import SRTFormatter
+            entries = SRTFormatter().format_segments(segments)
             write_srt(entries, out_path)
         elif output == 'txt':
             from audiosmith.download import segments_to_txt

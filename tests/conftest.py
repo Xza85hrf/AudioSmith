@@ -4,6 +4,14 @@ import pytest
 from pathlib import Path
 
 
+def pytest_collection_modifyitems(items):
+    """Auto-mark tests without integration or slow markers as unit tests."""
+    for item in items:
+        markers = {marker.name for marker in item.iter_markers()}
+        if 'integration' not in markers and 'slow' not in markers:
+            item.add_marker(pytest.mark.unit)
+
+
 @pytest.fixture
 def tmp_output(tmp_path):
     """Provide a temporary output directory."""

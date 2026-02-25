@@ -67,3 +67,18 @@ class TTSError(ProcessingError):
 class DubbingError(ProcessingError):
     def __init__(self, message, error_code=None, details=None, original_error=None):
         super().__init__(message, error_code or "DUB_ERR", details, original_error)
+
+
+class DiarizationError(ProcessingError):
+    def __init__(self, message, error_code=None, details=None, original_error=None):
+        super().__init__(message, error_code or "DIAR_ERR", details, original_error)
+
+
+class VocalIsolationError(ProcessingError):
+    def __init__(self, message, error_code=None, details=None, original_error=None):
+        super().__init__(message, error_code or "VOCAL_ERR", details, original_error)
+
+
+class ValidationError(ProcessingError):
+    def __init__(self, message, error_code=None, details=None, original_error=None):
+        super().__init__(message, error_code or "VALID_ERR", details, original_error)

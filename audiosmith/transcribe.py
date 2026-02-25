@@ -6,8 +6,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import torch
-
 from audiosmith.exceptions import TranscriptionError
 from audiosmith.error_codes import ErrorCode
 
@@ -72,8 +70,17 @@ class Transcriber:
                 original_error=e,
             )
 
-    def transcribe(self, audio_path: Path, language: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Transcribe audio file. Returns list of segment dicts with text/start/end/words."""
+    def transcribe(
+        self,
+        audio_path: Path,
+        language: Optional[str] = None,
+        diarization_segments: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Transcribe audio file. Returns list of segment dicts with text/start/end/words.
+
+        If diarization_segments is provided, each segment gets a 'speaker' key
+        assigned by maximum timing overlap with diarization results.
+        """
         self.load_model()
         t0 = time.time()
 
@@ -107,6 +114,11 @@ class Transcriber:
                     })
             result.append(entry)
 
+        # Apply speaker diarization if segments provided
+        if diarization_segments:
+            from audiosmith.diarizer import Diarizer
+            result = Diarizer.apply_to_transcription(result, diarization_segments)
+
         elapsed = time.time() - t0
         logger.info("Transcribed %d segments in %.1fs", len(result), elapsed)
         return result
@@ -120,6 +132,7 @@ class Transcriber:
         self._batched = self._model = None
         gc.collect()
         try:
+            import torch
             torch.cuda.empty_cache()
         except Exception:
             pass
