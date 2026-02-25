@@ -10,7 +10,11 @@ from typing import Any, Dict, List, Optional
 class DubbingStep(Enum):
     """Pipeline step identifiers."""
     EXTRACT_AUDIO = 'extract_audio'
+    ISOLATE_VOCALS = 'isolate_vocals'
     TRANSCRIBE = 'transcribe'
+    DIARIZE = 'diarize'
+    DETECT_EMOTION = 'detect_emotion'
+    POST_PROCESS = 'post_process'
     TRANSLATE = 'translate'
     GENERATE_TTS = 'generate_tts'
     MIX_AUDIO = 'mix_audio'
@@ -36,6 +40,10 @@ class DubbingConfig:
     chatterbox_exaggeration: float = 0.5
     chatterbox_cfg_weight: float = 0.5
     burn_subtitles: bool = True
+    isolate_vocals: bool = False
+    diarize: bool = False
+    detect_emotion: bool = False
+    post_process: bool = True
     resume: bool = False
 
 

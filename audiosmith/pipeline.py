@@ -15,6 +15,30 @@ logger = logging.getLogger(__name__)
 
 CHECKPOINT_FILE = '.checkpoint.json'
 
+# Emotion → Chatterbox TTS parameter offsets (exaggeration, cfg_weight)
+_EMOTION_TTS_MAP: Dict[str, Dict[str, float]] = {
+    'happy': {'exaggeration': 0.7, 'cfg_weight': 0.5},
+    'sad': {'exaggeration': 0.3, 'cfg_weight': 0.4},
+    'angry': {'exaggeration': 0.9, 'cfg_weight': 0.7},
+    'fearful': {'exaggeration': 0.6, 'cfg_weight': 0.6},
+    'surprised': {'exaggeration': 0.8, 'cfg_weight': 0.5},
+    'whisper': {'exaggeration': 0.2, 'cfg_weight': 0.3},
+    'sarcastic': {'exaggeration': 0.6, 'cfg_weight': 0.5},
+    'tender': {'exaggeration': 0.3, 'cfg_weight': 0.4},
+    'excited': {'exaggeration': 0.8, 'cfg_weight': 0.6},
+    'determined': {'exaggeration': 0.7, 'cfg_weight': 0.6},
+}
+
+
+def _emotion_to_tts_params(emotion: str, intensity: float = 0.5) -> Dict[str, float]:
+    """Convert emotion label + intensity to Chatterbox TTS parameters."""
+    params = _EMOTION_TTS_MAP.get(emotion, {'exaggeration': 0.5, 'cfg_weight': 0.5})
+    # Scale towards defaults at low intensity, towards full values at high intensity
+    return {
+        'exaggeration': 0.5 + (params['exaggeration'] - 0.5) * intensity,
+        'cfg_weight': 0.5 + (params['cfg_weight'] - 0.5) * intensity,
+    }
+
 
 class DubbingPipeline:
     """Orchestrates the 6-step dubbing pipeline with optional resume."""
@@ -81,13 +105,32 @@ class DubbingPipeline:
     # ------------------------------------------------------------------
     def _generate_tts(self, segments: List[DubbingSegment]) -> List[DubbingSegment]:
         import soundfile as sf
-        from audiosmith.tts import ChatterboxTTS
 
         tts_dir = Path(self.config.output_dir) / 'tts_segments'
         tts_dir.mkdir(parents=True, exist_ok=True)
 
-        engine = ChatterboxTTS()
-        engine.load_model()
+        has_speakers = any(s.speaker_id for s in segments)
+        has_emotion = any(s.metadata.get('emotion') for s in segments)
+        use_multi = has_speakers or has_emotion
+
+        if use_multi:
+            from audiosmith.multi_voice_tts import MultiVoiceTTS
+            engine = MultiVoiceTTS(
+                device=self.config.whisper_device,
+                language=self.config.target_language,
+                default_exaggeration=self.config.chatterbox_exaggeration,
+                default_cfg_weight=self.config.chatterbox_cfg_weight,
+            )
+            if self.config.audio_prompt_path:
+                engine.set_default_voice(str(self.config.audio_prompt_path))
+                voice_dir = self.config.audio_prompt_path.parent
+                speaker_ids = list({s.speaker_id for s in segments if s.speaker_id})
+                engine.auto_assign_voices(speaker_ids, voice_dir)
+            engine.load_model()
+        else:
+            from audiosmith.tts import ChatterboxTTS
+            engine = ChatterboxTTS(device=self.config.whisper_device)
+            engine.load_model()
 
         prompt = str(self.config.audio_prompt_path) if self.config.audio_prompt_path else None
 
@@ -95,20 +138,33 @@ class DubbingPipeline:
             text = seg.translated_text or seg.original_text
             if not text.strip():
                 continue
-            wav = engine.synthesize(
-                text,
-                language=self.config.target_language,
-                audio_prompt_path=prompt,
-                exaggeration=self.config.chatterbox_exaggeration,
-                cfg_weight=self.config.chatterbox_cfg_weight,
-            )
+
+            if use_multi:
+                emotion_params = None
+                emo_data = seg.metadata.get('emotion')
+                if emo_data:
+                    emotion_params = _emotion_to_tts_params(
+                        emo_data['primary'], emo_data.get('intensity', 0.5),
+                    )
+                wav = engine.synthesize(text, speaker_id=seg.speaker_id, emotion_params=emotion_params)
+            else:
+                wav = engine.synthesize(
+                    text, language=self.config.target_language,
+                    audio_prompt_path=prompt,
+                    exaggeration=self.config.chatterbox_exaggeration,
+                    cfg_weight=self.config.chatterbox_cfg_weight,
+                )
+
             wav_path = tts_dir / f'seg_{seg.index:04d}.wav'
             sf.write(str(wav_path), wav, engine.sample_rate)
             seg.tts_audio_path = wav_path
             info = sf.info(str(wav_path))
             seg.tts_duration_ms = int(info.duration * 1000)
 
-        engine.cleanup()
+        if use_multi:
+            engine.unload()
+        else:
+            engine.cleanup()
         return segments
 
     # ------------------------------------------------------------------
@@ -153,6 +209,8 @@ class DubbingPipeline:
                 'end_time': s.end_time,
                 'original_text': s.original_text,
                 'translated_text': s.translated_text,
+                'speaker_id': s.speaker_id,
+                'metadata': s.metadata,
                 'tts_audio_path': str(s.tts_audio_path) if s.tts_audio_path else None,
                 'tts_duration_ms': s.tts_duration_ms,
             })
@@ -169,6 +227,8 @@ class DubbingPipeline:
                 original_text=d['original_text'],
                 translated_text=d.get('translated_text', ''),
             )
+            seg.speaker_id = d.get('speaker_id')
+            seg.metadata = d.get('metadata', {})
             if d.get('tts_audio_path'):
                 seg.tts_audio_path = Path(d['tts_audio_path'])
             seg.tts_duration_ms = d.get('tts_duration_ms')
@@ -177,17 +237,20 @@ class DubbingPipeline:
 
     @staticmethod
     def _write_srt(segments: List[DubbingSegment], path: Path) -> None:
-        from audiosmith.srt import SRTEntry, write_srt, seconds_to_timestamp
+        from audiosmith.srt import write_srt
+        from audiosmith.srt_formatter import SRTFormatter
 
-        entries = []
-        for i, seg in enumerate(segments, 1):
-            text = seg.translated_text or seg.original_text
-            entries.append(SRTEntry(
-                index=i,
-                start_time=seconds_to_timestamp(seg.start_time),
-                end_time=seconds_to_timestamp(seg.end_time),
-                text=text,
-            ))
+        formatter = SRTFormatter()
+        raw_segments = [
+            {
+                'text': seg.translated_text or seg.original_text,
+                'start': seg.start_time,
+                'end': seg.end_time,
+                'words': [],
+            }
+            for seg in segments
+        ]
+        entries = formatter.format_segments(raw_segments)
         write_srt(entries, path)
 
     def _save_checkpoint(self) -> None:
@@ -223,6 +286,23 @@ class DubbingPipeline:
             total_duration = probe_duration(video_path)
             self.state.duration = total_duration
 
+            # Step 1.5: Isolate vocals (optional)
+            step = DubbingStep.ISOLATE_VOCALS.value
+            if self.config.isolate_vocals:
+                if self.state.is_step_done(step):
+                    logger.info("Skipping %s (cached)", step)
+                else:
+                    from audiosmith.vocal_isolator import VocalIsolator
+                    ts = time.time()
+                    vi = VocalIsolator(device=self.config.whisper_device)
+                    paths = vi.isolate(audio_path, output_dir=Path(self.config.output_dir))
+                    vi.unload()
+                    audio_path = paths['vocals_path']
+                    self.state.audio_path = str(audio_path)
+                    result.step_times[step] = time.time() - ts
+                    self.state.mark_step_done(step)
+                    self._save_checkpoint()
+
             # Step 2: Transcribe
             step = DubbingStep.TRANSCRIBE.value
             if self.state.is_step_done(step) and self.state.segments:
@@ -236,7 +316,71 @@ class DubbingPipeline:
                 self.state.mark_step_done(step)
                 self._save_checkpoint()
 
+            # Step 2.5: Post-process transcription (optional, on by default)
+            step = DubbingStep.POST_PROCESS.value
+            if self.config.post_process:
+                if self.state.is_step_done(step):
+                    segments = self._dicts_to_segments(self.state.segments)
+                    logger.info("Skipping %s (cached)", step)
+                else:
+                    from audiosmith.transcription_post_processor import TranscriptionPostProcessor
+                    ts = time.time()
+                    pp = TranscriptionPostProcessor()
+                    segments = pp.process(segments)
+                    result.step_times[step] = time.time() - ts
+                    self.state.segments = self._segments_to_dicts(segments)
+                    self.state.mark_step_done(step)
+                    self._save_checkpoint()
+
             result.total_segments = len(segments)
+
+            # Step 2.7: Diarize (optional)
+            step = DubbingStep.DIARIZE.value
+            if self.config.diarize:
+                if self.state.is_step_done(step):
+                    # Restore speaker_id from checkpoint
+                    segments = self._dicts_to_segments(self.state.segments)
+                    logger.info("Skipping %s (cached)", step)
+                else:
+                    from audiosmith.diarizer import Diarizer
+                    ts = time.time()
+                    d = Diarizer(device=self.config.whisper_device)
+                    diar_segments = d.diarize(audio_path)
+                    d.unload()
+                    # Assign speaker_id to each DubbingSegment by timing overlap
+                    trans_dicts = [
+                        {'start': s.start_time, 'end': s.end_time}
+                        for s in segments
+                    ]
+                    labeled = Diarizer.apply_to_transcription(trans_dicts, diar_segments)
+                    for seg, lbl in zip(segments, labeled):
+                        seg.speaker_id = lbl.get('speaker')
+                    result.step_times[step] = time.time() - ts
+                    self.state.segments = self._segments_to_dicts(segments)
+                    self.state.mark_step_done(step)
+                    self._save_checkpoint()
+
+            # Step 2.7: Detect emotion (optional)
+            step = DubbingStep.DETECT_EMOTION.value
+            if self.config.detect_emotion:
+                if self.state.is_step_done(step):
+                    segments = self._dicts_to_segments(self.state.segments)
+                    logger.info("Skipping %s (cached)", step)
+                else:
+                    from audiosmith.emotion import EmotionEngine
+                    ts = time.time()
+                    engine = EmotionEngine(use_classifier=False)
+                    for seg in segments:
+                        emo = engine.analyze(seg.original_text)
+                        seg.metadata['emotion'] = {
+                            'primary': emo.primary_emotion.value,
+                            'confidence': emo.confidence,
+                            'intensity': emo.intensity,
+                        }
+                    result.step_times[step] = time.time() - ts
+                    self.state.segments = self._segments_to_dicts(segments)
+                    self.state.mark_step_done(step)
+                    self._save_checkpoint()
 
             # Step 3: Translate
             step = DubbingStep.TRANSLATE.value

@@ -3,6 +3,7 @@
 from audiosmith.exceptions import (
     AudioSmithError, ProcessingError, TranscriptionError,
     TranslationError, TTSError, DubbingError,
+    DiarizationError, VocalIsolationError,
 )
 
 
@@ -26,11 +27,15 @@ class TestExceptionHierarchy:
         assert issubclass(TranscriptionError, ProcessingError)
         assert issubclass(TranslationError, ProcessingError)
         assert issubclass(TTSError, ProcessingError)
+        assert issubclass(DiarizationError, ProcessingError)
+        assert issubclass(VocalIsolationError, ProcessingError)
 
     def test_default_codes(self):
         assert DubbingError('x').error_code == 'DUB_ERR'
         assert TTSError('x').error_code == 'TTS_ERR'
         assert TranslationError('x').error_code == 'TRAN_ERR'
+        assert DiarizationError('x').error_code == 'DIAR_ERR'
+        assert VocalIsolationError('x').error_code == 'VOCAL_ERR'
 
     def test_original_error(self):
         orig = ValueError('bad')

@@ -83,6 +83,9 @@ class ErrorCode(Enum):
     DUBBING_MIX_ERROR = 9004
     DUBBING_ENCODE_ERROR = 9005
     DUBBING_PIPELINE_ERROR = 9006
+    DUBBING_DIARIZATION_ERROR = 9007
+    DUBBING_VOCAL_ISOLATION_ERROR = 9008
+    DUBBING_EMOTION_ERROR = 9009
 
     @classmethod
     def get_category(cls, code) -> ErrorCategory:
@@ -139,5 +142,8 @@ class ErrorCode(Enum):
             cls.DUBBING_MIX_ERROR: "Audio mixing failed during dubbing",
             cls.DUBBING_ENCODE_ERROR: "Video encoding failed during dubbing",
             cls.DUBBING_PIPELINE_ERROR: "Generic dubbing pipeline failure",
+            cls.DUBBING_DIARIZATION_ERROR: "Speaker diarization failed during dubbing",
+            cls.DUBBING_VOCAL_ISOLATION_ERROR: "Vocal isolation failed during dubbing",
+            cls.DUBBING_EMOTION_ERROR: "Emotion detection failed during dubbing",
         }
         return descriptions.get(code, "Unknown error")
