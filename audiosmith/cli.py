@@ -1,4 +1,4 @@
-"""Click CLI for AudioSmith — dub, transcribe, translate, batch, export, normalize, check, tts."""
+"""Click CLI for AudioSmith — dub, transcribe, translate, batch, export, normalize, check, tts, extract-voices."""
 
 import sys
 from pathlib import Path
@@ -346,6 +346,54 @@ def tts(text, engine, voice, output, language):
             q.cleanup()
 
         click.echo(f"TTS ({engine}) -> {output_path}")
+    except AudioSmithError as e:
+        click.echo(f"Error: {e.message}", err=True)
+        sys.exit(1)
+
+
+@cli.command('extract-voices')
+@click.argument('audio', type=click.Path(exists=True))
+@click.option('--output-dir', '-o', default=None, type=click.Path(), help='Output directory for voice samples.')
+@click.option('--num-samples', '-n', default=5, type=int, help='Number of samples to extract (even mode).')
+@click.option('--sample-duration', default=5.0, type=float, help='Duration of each sample in seconds.')
+@click.option('--sample-rate', default=24000, type=int, help='Output sample rate in Hz.')
+@click.option('--diarize', is_flag=True, help='Use speaker diarization to identify voices (requires pyannote-audio).')
+@click.option('--num-speakers', default=None, type=int, help='Expected number of speakers (with --diarize).')
+@click.option('--catalog', '-c', default=None, type=click.Path(), help='Save voice catalog JSON to this path.')
+def extract_voices(audio, output_dir, num_samples, sample_duration, sample_rate, diarize, num_speakers, catalog):
+    """Extract voice samples from audio for TTS voice cloning."""
+    from audiosmith.voice_extractor import VoiceExtractor, create_voice_profiles
+
+    audio_path = Path(audio)
+    out_dir = Path(output_dir) if output_dir else audio_path.parent / f'{audio_path.stem}_voices'
+
+    try:
+        extractor = VoiceExtractor(
+            out_dir, sample_duration=sample_duration, sample_rate=sample_rate,
+        )
+
+        if diarize:
+            voice_catalog = extractor.extract_with_diarization(audio_path, num_speakers=num_speakers)
+        else:
+            voice_catalog = extractor.extract_evenly(audio_path, num_samples=num_samples)
+
+        speakers = voice_catalog.get_speakers()
+        click.echo(f"Extracted {len(voice_catalog.samples)} samples from {len(speakers)} speaker(s)")
+
+        for sid in speakers:
+            best = voice_catalog.get_best_sample(sid)
+            if best:
+                click.echo(f"  {sid}: {best.sample_path.name} ({best.duration:.1f}s, {best.mean_volume_db:.1f} dB)")
+
+        if catalog:
+            catalog_path = Path(catalog)
+            voice_catalog.save(catalog_path)
+            click.echo(f"Catalog saved: {catalog_path}")
+
+        profiles = create_voice_profiles(voice_catalog)
+        if profiles:
+            click.echo(f"\nVoice profiles ready for TTS cloning ({len(profiles)} voices)")
+
     except AudioSmithError as e:
         click.echo(f"Error: {e.message}", err=True)
         sys.exit(1)

@@ -37,6 +37,7 @@ __all__ = [
     "transcription_post_processor",
     "vad",
     "vocal_isolator",
+    "voice_extractor",
     "translate",
     "tts",
 ]
