@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "audiosmith"
-version = "0.2.0"
+version = "0.5.0"
 description = "CLI audio/video processing toolkit — dubbing, transcription, translation"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -22,7 +22,13 @@ dependencies = [
 [project.optional-dependencies]
 quality = ["pyannote-audio>=3.0", "demucs>=4.0"]
 gemma = ["transformers>=4.40", "accelerate>=0.27", "bitsandbytes>=0.42"]
+qwen3 = ["qwen-tts>=0.1"]
+piper = ["piper-tts>=1.2"]
+docs = ["fpdf2>=2.7", "python-docx>=1.0"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0"]
+all = [
+    "audiosmith[quality,gemma,qwen3,piper,docs]",
+]
 ci = [
     "click>=8.1",
     "numpy>=1.24,<3",
