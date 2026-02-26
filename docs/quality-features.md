@@ -101,6 +101,67 @@ Speaker-aware voice cloning that assigns distinct voices to different speakers.
 
 ---
 
+## TTS Engines
+
+AudioSmith supports four TTS engines, each suited for different use cases.
+
+### Chatterbox (Default)
+
+Multilingual zero-shot voice cloning via ResembleAI Chatterbox. Supports 23 languages with emotion modulation.
+
+```bash
+audiosmith tts "Hello world" -o output.wav --engine chatterbox
+audiosmith tts "Hello world" -o output.wav --engine chatterbox --audio-prompt voice.wav
+```
+
+### Qwen3
+
+Premium named voices, voice cloning (ICL/x-vector), and text-described voice design. 10 languages, 9 premium voices.
+
+```bash
+# Premium voice
+audiosmith tts "Hello world" -o output.wav --engine qwen3 --voice Ryan
+
+# Voice cloning from reference audio
+audiosmith tts "Hello world" -o output.wav --engine qwen3 --ref-audio sample.wav
+
+# Voice design from text description
+audiosmith tts "Hello world" -o output.wav --engine qwen3 --instruct "Male, 30 years old, warm and calm"
+
+# Interactive mode
+audiosmith tts "Hello" -o out.wav --engine qwen3 -i
+```
+
+**Qwen3 model types:** `base` (voice cloning), `voice_design` (text-described voices), `custom_voice` (premium named speakers). Auto-selected based on options.
+
+**Premium voices:** Ryan, Aiden, Dylan, Eric, Serena, Luna, Mia, Aria, Ethan
+
+### Piper
+
+Lightweight ONNX-based TTS for fast CPU inference. Pre-trained English and Polish voices.
+
+```bash
+audiosmith tts "Hello world" -o output.wav --engine piper
+audiosmith tts "Hello world" -o output.wav --engine piper --voice en_US-lessac-medium
+```
+
+### Voice Extraction
+
+Extract voice samples from audio files for use with voice cloning:
+
+```bash
+# Extract 5 evenly-spaced samples
+audiosmith extract-voices recording.wav -n 5
+
+# Extract with speaker diarization
+audiosmith extract-voices recording.wav --diarize
+
+# Save voice catalog
+audiosmith extract-voices recording.wav -n 5 --catalog voices/
+```
+
+---
+
 ## Combining Features
 
 Features can be stacked for maximum quality:

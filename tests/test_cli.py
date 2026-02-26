@@ -84,7 +84,7 @@ class TestExportCommand:
              patch('audiosmith.document_formatter.DocumentFormatter', return_value=mock_fmt):
             result = CliRunner().invoke(cli, ['export', str(srt), '-f', 'txt'])
         assert result.exit_code == 0
-        assert 'Exported' in result.output
+        assert 'Export Complete' in result.output
 
 
 class TestBatchCommand:
