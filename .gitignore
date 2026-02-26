@@ -5,13 +5,14 @@ __pycache__/
 dist/
 build/
 *.egg
+*.pyo
 
 # Virtual envs
 .venv/
 venv/
 env/
 
-# ML models
+# ML models (symlinked from HuggingFace cache)
 models/
 
 # IDE
@@ -34,5 +35,25 @@ logs/
 *.mp3
 .checkpoint.json
 
+# Test artifacts
+test-files/dubbing-demo/comparison-*/
+test-files/dubbing-demo/old-comparison/
+test-files/videos/dubbed_output/
+.coverage
+.pytest_cache/
+
 # Environment
 .env
+
+# Claude Code internals
+.claude/.delegation-token
+.claude/.context-budget-counter
+.claude/.context-budget-weight
+.claude/context-snapshot.json
+.claude/pre-compact-state.md
+.claude/session-log.txt
+.claude/worker-performance.log
+
+# Session handoffs (auto-generated)
+docs/session-handoffs/
+docs/project-state.md

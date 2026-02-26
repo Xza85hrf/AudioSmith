@@ -52,16 +52,11 @@ class PiperTTS:
             self._model = None
         self._load_model()
 
-        import io
-        import wave
         import numpy as np
 
-        audio_bytes = b""
-        for chunk in self._model.synthesize_stream_raw(text):
-            audio_bytes += chunk
-
-        audio = np.frombuffer(audio_bytes, dtype=np.int16)
-        return audio.astype(np.float32) / 32768.0
+        chunks = list(self._model.synthesize(text))
+        audio = np.concatenate([c.audio_float_array for c in chunks])
+        return audio
 
     def list_voices(self) -> List[str]:
         """Return available voice identifiers."""
