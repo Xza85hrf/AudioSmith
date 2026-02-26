@@ -7,6 +7,7 @@ from pathlib import Path
 from audiosmith.qwen3_tts import (
     Qwen3TTS, VoiceProfile, PREMIUM_VOICES, SUPPORTED_LANGUAGES,
     MODEL_VARIANTS, detect_language, estimate_synthesis_duration,
+    _normalize_language, _LANGUAGE_MAP,
 )
 from audiosmith.exceptions import TTSError
 
@@ -63,7 +64,7 @@ class TestQwen3TTS:
         assert tts.device_str == "auto"
         assert tts.use_flash_attention is True
         assert tts.dtype_str == "bfloat16"
-        assert tts.sample_rate == 12000
+        assert tts.sample_rate == 24000
         assert tts.initialized is False
         assert tts.max_voice_cache == 10
         assert tts._base_model is None
@@ -220,6 +221,33 @@ class TestDetectLanguage:
 
     def test_mixed_defaults_english(self):
         assert detect_language("Hello world test sentence") == "English"
+
+
+class TestNormalizeLanguage:
+    def test_iso_code_en(self):
+        assert _normalize_language("en") == "english"
+
+    def test_iso_code_zh(self):
+        assert _normalize_language("zh") == "chinese"
+
+    def test_full_name_lowercase(self):
+        assert _normalize_language("english") == "english"
+
+    def test_full_name_capitalized(self):
+        assert _normalize_language("English") == "english"
+
+    def test_full_name_uppercase(self):
+        assert _normalize_language("JAPANESE") == "japanese"
+
+    def test_iso_polish(self):
+        assert _normalize_language("pl") == "auto"
+
+    def test_auto(self):
+        assert _normalize_language("auto") == "auto"
+
+    def test_unsupported_raises(self):
+        with pytest.raises(TTSError, match="Unsupported language"):
+            _normalize_language("xx")
 
 
 class TestEstimateSynthesisDuration:

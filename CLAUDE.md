@@ -120,35 +120,65 @@ Detailed rules are in `.claude/rules/` — auto-loaded by Claude Code:
 
 ### What Is This Project
 
-**[Project Name]** — Brief description of what this project does.
+**AudioSmith** — CLI-first audio/video processing toolkit for dubbing, transcription, translation, and speech synthesis. 38 modules, 12 CLI commands, 4 TTS engines, 10-step pipeline with checkpoint/resume.
 
 ### Tech Stack
 
 | Layer | Technology | Notes |
 |-------|-----------|-------|
-| **Frontend** | | |
-| **Backend** | | |
-| **Database** | | |
-| **Deployment** | | |
+| **Language** | Python 3.11+ | Type hints throughout |
+| **CLI** | Click + Rich | 12 commands, tables, panels, spinners |
+| **Transcription** | Faster-Whisper | GPU-accelerated, multiple model sizes |
+| **Translation** | Argos + TranslateGemma | Offline + GPU-accelerated options |
+| **TTS** | Chatterbox, Qwen3, Piper, MultiVoice | 4 engines, voice cloning, emotion modulation |
+| **Audio** | FFmpeg, SoundFile, NumPy | Processing, mixing, encoding |
+| **Diarization** | PyAnnote Audio 3.0 | Optional, `[quality]` extra |
+| **Vocal Isolation** | Demucs | Optional, `[quality]` extra |
+| **Testing** | pytest + pytest-cov | 402 tests, no GPU required |
+| **Build** | setuptools | pyproject.toml, editable install |
 
 ### Project Layout
 
 ```
-project/
-├── src/
-├── docs/
-├── package.json
+AudioSmith/
+├── audiosmith/           # 38 Python modules (flat structure)
+│   ├── cli.py            # Rich CLI (12 commands)
+│   ├── pipeline.py       # 10-step dubbing orchestrator
+│   ├── tts.py            # Chatterbox TTS
+│   ├── qwen3_tts.py      # Qwen3 TTS (premium/clone/design)
+│   ├── piper_tts.py      # Piper ONNX TTS
+│   ├── models.py         # DubbingSegment, DubbingConfig
+│   ├── exceptions.py     # Exception hierarchy
+│   └── ...               # See README.md for full listing
+├── tests/                # 402 unit tests
+├── models/               # Symlinked model directories
+├── docs/                 # quality-features.md, etc.
+├── pyproject.toml        # Build config, deps, pytest settings
 └── README.md
 ```
 
 ### Commands
 
 ```bash
-# Install dependencies
-# Dev server
-# Build
-# Test
-# Typecheck
+# Install
+pip install -e ".[dev]"
+
+# Install all optional features
+pip install -e ".[all]"
+
+# Run tests
+python -m pytest tests/ -v
+
+# Run tests with coverage
+python -m pytest tests/ --cov=audiosmith --cov-report=term-missing
+
+# Run specific test file
+python -m pytest tests/test_qwen3_tts.py -v
+
+# CLI usage
+audiosmith --help
+audiosmith info
+audiosmith check
 ```
 
 ### Coding Rules (by priority)
@@ -156,17 +186,20 @@ project/
 #### P0 — NEVER violate (blocks merge)
 
 ```
-1. [Language] + [Type system] — all new code must be typed
+1. Python 3.11+ — all new code must have type hints
 2. No secrets in code (use env vars)
-3. [Add project-critical rules]
+3. Lazy imports for all heavy deps (torch, whisper, pyannote, demucs, etc.)
+4. All exceptions inherit from AudioSmithError hierarchy
+5. DubbingSegment fields: original_text, start_time, end_time (NOT text, start, end)
 ```
 
 #### P1 — SHOULD follow (review will flag)
 
 ```
-1. Follow existing naming conventions
-2. New features require tests
-3. [Add project-standard rules]
+1. Follow existing naming conventions (snake_case functions, PascalCase classes)
+2. New features require tests (target: 60%+ coverage)
+3. Use Rich Console for all CLI output (tables, panels, spinners)
+4. Mock lazy imports at source module path (e.g., audiosmith.pipeline.DubbingPipeline)
 ```
 
 #### P2 — PREFER when practical
@@ -174,67 +207,70 @@ project/
 ```
 1. Prefer composition over inheritance
 2. Keep functions under 30 lines
-3. [Add project-preference rules]
+3. Use dataclasses for data models
+4. Group related functionality in single modules (flat structure, no sub-packages)
 ```
 
 #### BANNED
 
 ```
-❌ [Add project-specific banned patterns]
+❌ Importing torch/whisper/pyannote at module level (use lazy imports)
+❌ Using DubbingSegment field names wrong (seg.text → seg.original_text, seg.start → seg.start_time)
+❌ FileNotFoundError before OSError in except chains (FileNotFoundError inherits from OSError)
+❌ Hardcoding model paths (use HuggingFace cache or configurable paths)
 ```
 
 ### Context Layers
 
-<!--
-  Core: Things that rarely change (architecture, tech stack decisions)
-  Standards: Patterns to follow (coding conventions, test patterns)
-  Current: Active work (current sprint, in-progress features)
--->
-
 #### Core (stable)
-- Architecture: [monolith/microservices/serverless]
-- Auth: [JWT/session/OAuth]
-- Database: [schema overview or link]
+- Architecture: Single Python package, flat module structure, CLI entry point
+- Pipeline: 10-step DubbingPipeline with JSON checkpoint/resume
+- Exception hierarchy: AudioSmithError → ProcessingError → specialized errors
+- Data models: DubbingSegment (index, start_time, end_time, original_text, translated_text, speaker_id, is_speech, is_hallucination, tts_audio_path, tts_duration_ms, metadata)
 
 #### Standards (conventions)
-- API style: [REST/GraphQL/tRPC]
-- Error pattern: [Result type/exceptions/error codes]
-- Test pattern: [arrange-act-assert/given-when-then]
+- Error pattern: Exception hierarchy with error codes (error_codes.py)
+- Test pattern: pytest classes, MagicMock for heavy deps, CliRunner for CLI tests
+- TTS pattern: Each engine is a standalone class with `synthesize()` method
+- Import pattern: Lazy imports in function bodies for GPU/ML dependencies
 
 #### Current (active work)
-- Sprint goal: [current focus]
-- In-progress: [active features/PRs]
-- Known issues: [blockers, tech debt items]
+- Version: 0.5.0
+- Recently completed: Qwen3 TTS integration, Rich CLI overhaul, voice extractor
+- 402 tests passing
 
 ### Quality Checklist (Definition of Done)
 
 ```
 For every code change, verify:
-□ Type checks pass with zero errors
+□ All 402+ tests pass (python -m pytest tests/ -v)
 □ No regressions in existing features
-□ Tests pass
-□ [Add project-specific checks]
+□ Coverage stays above 60%
+□ Heavy dependencies use lazy imports
+□ CLI output uses Rich (Console, Table, Panel)
+□ New public functions have type hints
 ```
 
 ### Configuration
 
 ```
-[Document project-specific config keys, env vars, etc.]
+# Environment variables
+HF_HOME            — HuggingFace cache directory (default: ~/.cache/huggingface)
+CUDA_VISIBLE_DEVICES — GPU selection for torch
+PYANNOTE_AUTH_TOKEN — HuggingFace token for PyAnnote (diarization)
+
+# Model locations (symlinked in models/)
+models/whisper/     — Faster-Whisper models (tiny through large-v3)
+models/qwen3/       — Qwen3-TTS-12Hz-1.7B-{Base,VoiceDesign,CustomVoice}
+models/chatterbox/  — ResembleAI Chatterbox
+models/piper/       — Piper ONNX voice models
+models/vad/         — Silero VAD model
 ```
 
 ### Reference Implementation
 
-<!--
-  Point to a well-written file that exemplifies your project's conventions.
-  New code should follow this file's patterns for naming, error handling, etc.
--->
-
 ```
-Reference file: [src/path/to/exemplary-file.ts]
-Follow this file's patterns for: naming, error handling, imports, test structure
+Reference file: audiosmith/qwen3_tts.py
+Follow this file's patterns for: lazy imports, dataclass models, LRU caching,
+context manager cleanup, error handling with TTSError, type hints
 ```
-
----
-
-*This CLAUDE.md template is part of the Agent Enhancement Kit.*
-*Customize the Project-Specific Section for each project.*

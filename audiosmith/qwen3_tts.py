@@ -101,6 +101,28 @@ MODEL_VARIANTS = {
     "custom_voice": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
 }
 
+# Map ISO 639-1 codes and common names to Qwen3 API language strings
+_LANGUAGE_MAP = {
+    "en": "english", "zh": "chinese", "ja": "japanese", "ko": "korean",
+    "de": "german", "fr": "french", "ru": "russian", "pt": "portuguese",
+    "es": "spanish", "it": "italian", "pl": "auto",
+    "english": "english", "chinese": "chinese", "japanese": "japanese",
+    "korean": "korean", "german": "german", "french": "french",
+    "russian": "russian", "portuguese": "portuguese", "spanish": "spanish",
+    "italian": "italian", "auto": "auto",
+}
+
+
+def _normalize_language(lang: str) -> str:
+    """Normalize language code to Qwen3 API format (lowercase full name)."""
+    normalized = _LANGUAGE_MAP.get(lang.lower())
+    if normalized is None:
+        supported = sorted(set(_LANGUAGE_MAP.values()))
+        raise TTSError(
+            f"Unsupported language '{lang}'. Supported: {supported}"
+        )
+    return normalized
+
 
 class Qwen3TTS:
     """Qwen3 Text-to-Speech synthesizer with voice cloning, design, and premium voices."""
@@ -133,7 +155,7 @@ class Qwen3TTS:
         self._voice_profiles: OrderedDict[str, VoiceProfile] = OrderedDict()
         self._audio_cache: Dict[str, Tuple[np.ndarray, int]] = {}
         self._max_audio_cache = 50
-        self.sample_rate = 12000
+        self.sample_rate = 24000
 
     def _determine_device(self) -> str:
         """Determine the optimal device for inference."""
@@ -187,13 +209,25 @@ class Qwen3TTS:
                     model_source = model_name
 
                 attn_impl = "flash_attention_2" if self.use_flash_attention else "eager"
-                model = Qwen3TTSModel.from_pretrained(
-                    model_source,
-                    device_map=device,
-                    dtype=dtype,
-                    attn_implementation=attn_impl,
-                    cache_dir=self.model_cache_dir if model_source == model_name else None,
-                )
+                try:
+                    model = Qwen3TTSModel.from_pretrained(
+                        model_source,
+                        device_map=device,
+                        dtype=dtype,
+                        attn_implementation=attn_impl,
+                        cache_dir=self.model_cache_dir if model_source == model_name else None,
+                    )
+                except (ImportError, ValueError):
+                    logger.warning(
+                        "flash_attention_2 unavailable, falling back to eager attention"
+                    )
+                    model = Qwen3TTSModel.from_pretrained(
+                        model_source,
+                        device_map=device,
+                        dtype=dtype,
+                        attn_implementation="eager",
+                        cache_dir=self.model_cache_dir if model_source == model_name else None,
+                    )
 
                 if model_type == "base":
                     self._base_model = model
@@ -268,10 +302,14 @@ class Qwen3TTS:
             ref_text=ref_text,
         )
 
+        model = self._base_model
         if ref_text:
-            model = self._base_model
             profile.voice_clone_prompt = model.create_voice_clone_prompt(
                 ref_audio=ref_audio, ref_text=ref_text,
+            )
+        else:
+            profile.voice_clone_prompt = model.create_voice_clone_prompt(
+                ref_audio=ref_audio, x_vector_only_mode=True,
             )
 
         self._add_voice_profile(profile)
@@ -299,7 +337,8 @@ class Qwen3TTS:
         if sample_text:
             model = self._design_model
             wavs, sr = model.generate_voice_design(
-                text=sample_text, language=language, instruct=instruct,
+                text=sample_text, instruct=instruct,
+                language=_normalize_language(language),
             )
             profile.ref_audio_path = None
             profile.ref_text = sample_text
@@ -351,7 +390,7 @@ class Qwen3TTS:
         """Synthesize using a voice profile (cloned or designed)."""
         self._ensure_model("base")
         model = self._base_model
-        lang = language or profile.language
+        lang = _normalize_language(language or profile.language)
         texts = [text] if isinstance(text, str) else text
         languages = [lang] * len(texts)
 
@@ -387,7 +426,7 @@ class Qwen3TTS:
         self._ensure_model("custom_voice")
         model = self._custom_model
         voice_info = PREMIUM_VOICES[speaker]
-        lang = language or voice_info["language"]
+        lang = _normalize_language(language or voice_info["language"])
 
         texts = [text] if isinstance(text, str) else text
         languages = [lang] * len(texts)
@@ -395,7 +434,7 @@ class Qwen3TTS:
         kwargs = {
             "text": texts if len(texts) > 1 else texts[0],
             "language": languages if len(languages) > 1 else languages[0],
-            "speaker": speaker,
+            "speaker": speaker.lower(),
         }
         if instruct:
             kwargs["instruct"] = instruct
@@ -429,29 +468,20 @@ class Qwen3TTS:
         items: List[Dict[str, Any]],
         default_voice: str = "Ryan",
     ) -> List[Tuple[np.ndarray, int]]:
-        """Batch synthesize multiple texts, grouped by voice."""
+        """Batch synthesize multiple texts, grouped by voice for model efficiency."""
         results: List[Tuple[int, Tuple[np.ndarray, int]]] = []
 
         by_voice: Dict[str, List[Tuple[int, Dict]]] = {}
         for i, item in enumerate(items):
             voice = item.get("voice", default_voice)
-            if voice not in by_voice:
-                by_voice[voice] = []
-            by_voice[voice].append((i, item))
+            by_voice.setdefault(voice, []).append((i, item))
 
         for voice, voice_items in by_voice.items():
-            texts = [item["text"] for _, item in voice_items]
-            language = voice_items[0][1].get("language")
-            audio, sr = self.synthesize(texts, voice, language)
-
-            if len(voice_items) > 1:
-                chunk_len = len(audio) // len(voice_items)
-                for j, (orig_idx, _) in enumerate(voice_items):
-                    start = j * chunk_len
-                    end = start + chunk_len if j < len(voice_items) - 1 else len(audio)
-                    results.append((orig_idx, (audio[start:end], sr)))
-            else:
-                results.append((voice_items[0][0], (audio, sr)))
+            for orig_idx, item in voice_items:
+                audio, sr = self.synthesize(
+                    item["text"], voice, item.get("language"),
+                )
+                results.append((orig_idx, (audio, sr)))
 
         results.sort(key=lambda x: x[0])
         return [r[1] for r in results]
