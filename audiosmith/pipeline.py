@@ -109,6 +109,61 @@ class DubbingPipeline:
         tts_dir = Path(self.config.output_dir) / 'tts_segments'
         tts_dir.mkdir(parents=True, exist_ok=True)
 
+        tts_engine_name = getattr(self.config, 'tts_engine', 'chatterbox')
+        prompt = str(self.config.audio_prompt_path) if self.config.audio_prompt_path else None
+
+        if tts_engine_name == 'qwen3':
+            engine, sample_rate = self._init_qwen3_engine()
+        elif tts_engine_name == 'piper':
+            engine, sample_rate = self._init_piper_engine()
+        else:
+            engine, sample_rate, use_multi = self._init_chatterbox_engine(segments)
+
+        for seg in segments:
+            text = seg.translated_text or seg.original_text
+            if not text.strip():
+                continue
+
+            try:
+                if tts_engine_name == 'qwen3':
+                    voice = 'clone' if prompt else 'Ryan'
+                    audio, sr = engine.synthesize(text, voice=voice)
+                    wav = audio
+                    sample_rate = sr
+                elif tts_engine_name == 'piper':
+                    wav = engine.synthesize(text)
+                else:  # chatterbox
+                    if use_multi:
+                        emotion_params = None
+                        emo_data = seg.metadata.get('emotion')
+                        if emo_data:
+                            emotion_params = _emotion_to_tts_params(
+                                emo_data['primary'], emo_data.get('intensity', 0.5),
+                            )
+                        wav = engine.synthesize(text, speaker_id=seg.speaker_id, emotion_params=emotion_params)
+                    else:
+                        wav = engine.synthesize(
+                            text, language=self.config.target_language,
+                            audio_prompt_path=prompt,
+                            exaggeration=self.config.chatterbox_exaggeration,
+                            cfg_weight=self.config.chatterbox_cfg_weight,
+                        )
+            except Exception as e:
+                logger.warning("TTS failed for segment %d, skipping: %s", seg.index, e)
+                continue
+
+            wav_path = tts_dir / f'seg_{seg.index:04d}.wav'
+            sf.write(str(wav_path), wav, sample_rate)
+            seg.tts_audio_path = wav_path
+            info = sf.info(str(wav_path))
+            seg.tts_duration_ms = int(info.duration * 1000)
+
+        engine.cleanup() if hasattr(engine, 'cleanup') else None
+        if hasattr(engine, 'unload'):
+            engine.unload()
+        return segments
+
+    def _init_chatterbox_engine(self, segments):
         has_speakers = any(s.speaker_id for s in segments)
         has_emotion = any(s.metadata.get('emotion') for s in segments)
         use_multi = has_speakers or has_emotion
@@ -132,40 +187,26 @@ class DubbingPipeline:
             engine = ChatterboxTTS(device=self.config.whisper_device)
             engine.load_model()
 
-        prompt = str(self.config.audio_prompt_path) if self.config.audio_prompt_path else None
+        return engine, engine.sample_rate, use_multi
 
-        for seg in segments:
-            text = seg.translated_text or seg.original_text
-            if not text.strip():
-                continue
-
-            if use_multi:
-                emotion_params = None
-                emo_data = seg.metadata.get('emotion')
-                if emo_data:
-                    emotion_params = _emotion_to_tts_params(
-                        emo_data['primary'], emo_data.get('intensity', 0.5),
-                    )
-                wav = engine.synthesize(text, speaker_id=seg.speaker_id, emotion_params=emotion_params)
-            else:
-                wav = engine.synthesize(
-                    text, language=self.config.target_language,
-                    audio_prompt_path=prompt,
-                    exaggeration=self.config.chatterbox_exaggeration,
-                    cfg_weight=self.config.chatterbox_cfg_weight,
-                )
-
-            wav_path = tts_dir / f'seg_{seg.index:04d}.wav'
-            sf.write(str(wav_path), wav, engine.sample_rate)
-            seg.tts_audio_path = wav_path
-            info = sf.info(str(wav_path))
-            seg.tts_duration_ms = int(info.duration * 1000)
-
-        if use_multi:
-            engine.unload()
+    def _init_qwen3_engine(self):
+        from audiosmith.qwen3_tts import Qwen3TTS
+        engine = Qwen3TTS(device=self.config.whisper_device)
+        if self.config.audio_prompt_path:
+            engine.load_model('base')
+            engine.create_voice_clone(
+                voice_name='clone',
+                ref_audio=str(self.config.audio_prompt_path),
+            )
         else:
-            engine.cleanup()
-        return segments
+            engine.load_model('custom_voice')
+        return engine, engine.sample_rate
+
+    def _init_piper_engine(self):
+        from audiosmith.piper_tts import PiperTTS
+        model_path = Path.home() / '.local' / 'share' / 'piper-voices' / 'en_US-lessac-medium.onnx'
+        engine = PiperTTS(model_path=model_path)
+        return engine, engine.sample_rate
 
     # ------------------------------------------------------------------
     # Step 5: Mix audio

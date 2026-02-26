@@ -177,7 +177,11 @@ def voices(engine):
 @click.option('--diarize', is_flag=True, help='Enable speaker diarization.')
 @click.option('--emotion', is_flag=True, help='Enable emotion detection for TTS.')
 @click.option('--isolate-vocals', is_flag=True, help='Isolate vocals before transcription.')
-def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, isolate_vocals):
+@click.option('--engine', type=click.Choice(['chatterbox', 'qwen3', 'piper']), default='chatterbox',
+              help='TTS engine to use.')
+@click.option('--audio-prompt', default=None, type=click.Path(exists=True),
+              help='Voice sample for cloning (WAV file).')
+def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, isolate_vocals, engine, audio_prompt):
     """Dub a video into another language."""
     from audiosmith.models import DubbingConfig
     from audiosmith.pipeline import DubbingPipeline
@@ -196,6 +200,8 @@ def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, i
             diarize=diarize,
             detect_emotion=emotion,
             resume=resume,
+            tts_engine=engine,
+            audio_prompt_path=Path(audio_prompt) if audio_prompt else None,
         )
         with console.status("[bold cyan]Running dubbing pipeline...[/bold cyan]", spinner="dots"):
             pipeline = DubbingPipeline(config)

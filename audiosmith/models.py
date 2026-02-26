@@ -36,6 +36,7 @@ class DubbingConfig:
     whisper_model: str = 'large-v3'
     whisper_compute_type: str = 'float16'
     whisper_device: str = 'cuda'
+    tts_engine: str = 'chatterbox'
     audio_prompt_path: Optional[Path] = None
     chatterbox_exaggeration: float = 0.5
     chatterbox_cfg_weight: float = 0.5
