@@ -16,6 +16,7 @@ class DubbingStep(Enum):
     DETECT_EMOTION = 'detect_emotion'
     POST_PROCESS = 'post_process'
     TRANSLATE = 'translate'
+    MERGE_SEGMENTS = 'merge_segments'
     GENERATE_TTS = 'generate_tts'
     MIX_AUDIO = 'mix_audio'
     ENCODE_VIDEO = 'encode_video'
@@ -30,7 +31,7 @@ class DubbingConfig:
     target_language: str = 'pl'
     max_duration: Optional[float] = None
     min_gap_ms: int = 150
-    max_speedup: float = 1.5
+    max_speedup: float = 2.0
     silence_reset_gap: float = 1.0
     dubbed_sample_rate: int = 48000
     whisper_model: str = 'large-v3'
@@ -38,13 +39,21 @@ class DubbingConfig:
     whisper_device: str = 'cuda'
     tts_engine: str = 'chatterbox'
     audio_prompt_path: Optional[Path] = None
-    chatterbox_exaggeration: float = 0.5
-    chatterbox_cfg_weight: float = 0.5
+    chatterbox_exaggeration: float = 0.7
+    chatterbox_cfg_weight: float = 0.7
+    elevenlabs_model: str = 'eleven_v3'
+    elevenlabs_voice_id: Optional[str] = None
+    elevenlabs_voice_name: Optional[str] = None
     burn_subtitles: bool = True
     isolate_vocals: bool = False
     diarize: bool = False
     detect_emotion: bool = False
+    merge_segments: bool = True
+    merge_max_gap_ms: int = 200
+    merge_max_duration_s: float = 8.0
     post_process: bool = True
+    post_process_tts: bool = True
+    post_process_intensity: float = 0.7
     resume: bool = False
 
 

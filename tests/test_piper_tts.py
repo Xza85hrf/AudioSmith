@@ -56,7 +56,7 @@ class TestPiperTTS:
         assert tts._model is None
 
     def test_voice_constants(self):
-        assert len(POLISH_VOICES) == 2
+        assert len(POLISH_VOICES) == 3
         assert len(ENGLISH_VOICES) == 3
         assert all("pl_PL" in v for v in POLISH_VOICES)
         assert all("en_" in v for v in ENGLISH_VOICES)

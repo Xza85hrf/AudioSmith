@@ -9,7 +9,7 @@ from audiosmith.exceptions import TTSError
 
 logger = logging.getLogger(__name__)
 
-POLISH_VOICES = ["pl_PL-gosia-medium", "pl_PL-aleksandra-medium"]
+POLISH_VOICES = ["pl_PL-darkman-medium", "pl_PL-gosia-medium", "pl_PL-aleksandra-medium"]
 ENGLISH_VOICES = ["en_US-lessac-medium", "en_US-amy-medium", "en_GB-alba-medium"]
 
 
@@ -43,8 +43,19 @@ class PiperTTS:
     def sample_rate(self) -> int:
         return 22050
 
-    def synthesize(self, text: str, voice: Optional[str] = None) -> Any:
-        """Synthesize text to audio numpy array (float32, mono)."""
+    def synthesize(
+        self,
+        text: str,
+        voice: Optional[str] = None,
+        length_scale: Optional[float] = None,
+    ) -> Any:
+        """Synthesize text to audio numpy array (float32, mono).
+
+        Args:
+            text: Text to synthesize.
+            voice: Optional voice name override.
+            length_scale: Speaking rate scale (< 1.0 = faster, > 1.0 = slower).
+        """
         if not text or not text.strip():
             raise TTSError("Text cannot be empty")
         if voice and voice != self.voice:
@@ -54,7 +65,14 @@ class PiperTTS:
 
         import numpy as np
 
-        chunks = list(self._model.synthesize(text))
+        from piper.config import SynthesisConfig
+        syn_config = SynthesisConfig(
+            length_scale=length_scale if length_scale is not None else 1.0,
+            noise_scale=0.8,
+            noise_w_scale=1.0,
+        )
+
+        chunks = list(self._model.synthesize(text, syn_config=syn_config))
         audio = np.concatenate([c.audio_float_array for c in chunks])
         return audio
 

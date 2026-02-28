@@ -3,7 +3,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List, Optional
 
 from audiosmith.models import (
     DubbingConfig, DubbingSegment, DubbingStep, DubbingResult, PipelineState,
@@ -101,8 +101,160 @@ class DubbingPipeline:
         return segments
 
     # ------------------------------------------------------------------
+    # Step 3.5: Merge short adjacent segments
+    # ------------------------------------------------------------------
+    def _merge_segments(self, segments: List[DubbingSegment]) -> List[DubbingSegment]:
+        """Merge short adjacent segments from the same speaker.
+
+        Combines segments that are close together (gap < merge_max_gap_ms)
+        and would fit within merge_max_duration_s when combined.  This gives
+        the TTS engine longer phrases with better prosody and bigger time
+        windows that need less speedup.
+        """
+        max_gap = self.config.merge_max_gap_ms / 1000.0
+        max_dur = self.config.merge_max_duration_s
+        # Chatterbox generates longer audio per word — use tighter limits
+        engine = getattr(self.config, 'tts_engine', 'piper')
+        if engine in ('chatterbox', 'auto') and self.config.target_language not in self._QWEN3_LANGS:
+            max_word_cap = 12
+            max_dur = min(max_dur, 4.0)
+        else:
+            max_word_cap = 30
+        merged: List[DubbingSegment] = []
+
+        for seg in segments:
+            if not merged:
+                merged.append(seg)
+                continue
+
+            prev = merged[-1]
+            gap = seg.start_time - prev.end_time
+            combined_dur = seg.end_time - prev.start_time
+            same_speaker = (prev.speaker_id or '') == (seg.speaker_id or '')
+
+            prev_words = len(prev.translated_text.split()) if prev.translated_text else len(prev.original_text.split())
+            seg_words = len(seg.translated_text.split()) if seg.translated_text else len(seg.original_text.split())
+            combined_words = prev_words + seg_words
+
+            if same_speaker and gap < max_gap and combined_dur <= max_dur and combined_words <= max_word_cap:
+                # Merge into previous: extend end time, join text
+                prev.end_time = seg.end_time
+                orig_sep = ' ' if prev.original_text.rstrip()[-1:] in '.!?' else ' '
+                prev.original_text = prev.original_text.rstrip() + orig_sep + seg.original_text.strip()
+                if prev.translated_text and seg.translated_text:
+                    trans_sep = ' ' if prev.translated_text.rstrip()[-1:] in '.!?' else ' '
+                    prev.translated_text = prev.translated_text.rstrip() + trans_sep + seg.translated_text.strip()
+                # Keep emotion/metadata from first segment
+            else:
+                merged.append(seg)
+
+        # Split any segments that are still too long (from transcription)
+        final: List[DubbingSegment] = []
+        for seg in merged:
+            text = seg.translated_text or seg.original_text
+            if len(text.split()) > max_word_cap:
+                final.extend(self._split_long_segment(seg, max_words=max_word_cap))
+            else:
+                final.append(seg)
+
+        # Re-index
+        for i, seg in enumerate(final):
+            seg.index = i
+
+        return final
+
+    @staticmethod
+    def _split_long_segment(seg: DubbingSegment, max_words: int = 25) -> List[DubbingSegment]:
+        """Split a long segment at sentence boundaries, distributing time proportionally."""
+        import re
+        text = seg.translated_text or seg.original_text
+        orig = seg.original_text
+
+        # Split on sentence-ending punctuation
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
+        if len(sentences) <= 1:
+            return [seg]
+
+        # Group sentences into chunks of ~max_words
+        chunks: List[str] = []
+        current: List[str] = []
+        current_words = 0
+        for sent in sentences:
+            w = len(sent.split())
+            if current_words + w > max_words and current:
+                chunks.append(' '.join(current))
+                current = [sent]
+                current_words = w
+            else:
+                current.append(sent)
+                current_words += w
+        if current:
+            chunks.append(' '.join(current))
+
+        # Distribute time proportionally by character count
+        total_chars = sum(len(c) for c in chunks)
+        total_dur = seg.end_time - seg.start_time
+        result = []
+        t = seg.start_time
+        for chunk in chunks:
+            frac = len(chunk) / total_chars if total_chars else 1.0 / len(chunks)
+            dur = total_dur * frac
+            result.append(DubbingSegment(
+                index=0,
+                start_time=t,
+                end_time=t + dur,
+                original_text=orig,
+                translated_text=chunk,
+                speaker_id=seg.speaker_id,
+                metadata=dict(seg.metadata),
+            ))
+            t += dur
+
+        return result
+
+    # ------------------------------------------------------------------
     # Step 4: Generate TTS
     # ------------------------------------------------------------------
+
+    # Languages each engine handles well
+    _QWEN3_LANGS = {'en', 'zh', 'ja', 'ko', 'de', 'fr', 'ru', 'pt', 'es', 'it'}
+    _PIPER_LANGS = {'en', 'pl', 'de'}
+    _FISH_LANGS = {'en', 'zh', 'ja', 'ko', 'de', 'fr', 'es', 'pt', 'ru', 'nl', 'it', 'pl', 'ar'}
+    _ELEVENLABS_LANGS = {
+        'en', 'es', 'de', 'fr', 'it', 'pt', 'pl', 'ru', 'ja', 'ko', 'zh',
+        'ar', 'bg', 'cs', 'da', 'nl', 'fi', 'el', 'hi', 'hu', 'id', 'ms',
+        'no', 'ro', 'sk', 'sv', 'ta', 'th', 'tr', 'uk', 'vi',
+    }
+
+    def _resolve_engine(self) -> str:
+        """Pick the best TTS engine for the target language."""
+        import os
+        target = self.config.target_language
+        # Prefer ElevenLabs when API key is available (best quality)
+        if os.getenv('ELEVENLABS_API_KEY') and target in self._ELEVENLABS_LANGS:
+            logger.info("Auto-selected ElevenLabs TTS for '%s' (API key present)", target)
+            return 'elevenlabs'
+        if os.getenv('FISH_API_KEY') and target in self._FISH_LANGS:
+            logger.info("Auto-selected Fish Speech TTS for '%s' (API key present)", target)
+            return 'fish'
+        if target in self._QWEN3_LANGS:
+            logger.info("Auto-selected Qwen3 TTS for '%s'", target)
+            return 'qwen3'
+        if target in self._PIPER_LANGS:
+            # Only use Piper if the native voice model is actually installed
+            voice = self._PIPER_VOICES.get(target)
+            if voice:
+                voice_dir = Path.home() / '.local' / 'share' / 'piper-voices'
+                if (voice_dir / f'{voice}.onnx').exists():
+                    logger.info("Auto-selected Piper TTS for '%s' (native voice model)", target)
+                    return 'piper'
+                logger.info(
+                    "Piper voice '%s' not installed, falling back to Chatterbox for '%s'",
+                    voice, target,
+                )
+        logger.info("Auto-selected Chatterbox TTS for '%s' (multilingual fallback)", target)
+        return 'chatterbox'
+
     def _generate_tts(self, segments: List[DubbingSegment]) -> List[DubbingSegment]:
         import soundfile as sf
 
@@ -110,10 +262,16 @@ class DubbingPipeline:
         tts_dir.mkdir(parents=True, exist_ok=True)
 
         tts_engine_name = getattr(self.config, 'tts_engine', 'chatterbox')
+        if tts_engine_name == 'auto':
+            tts_engine_name = self._resolve_engine()
         prompt = str(self.config.audio_prompt_path) if self.config.audio_prompt_path else None
 
-        if tts_engine_name == 'qwen3':
+        if tts_engine_name == 'elevenlabs':
+            engine, sample_rate = self._init_elevenlabs_engine()
+        elif tts_engine_name == 'qwen3':
             engine, sample_rate = self._init_qwen3_engine()
+        elif tts_engine_name == 'fish':
+            engine, sample_rate = self._init_fish_engine()
         elif tts_engine_name == 'piper':
             engine, sample_rate = self._init_piper_engine()
         else:
@@ -124,14 +282,38 @@ class DubbingPipeline:
             if not text.strip():
                 continue
 
+            # Collapse 3+ consecutive identical words to 2 (prevents TTS looping)
+            text = self._dedup_repeated_words(text)
+
             try:
-                if tts_engine_name == 'qwen3':
+                if tts_engine_name == 'elevenlabs':
+                    audio, sr = engine.synthesize(text)
+                    wav = audio
+                    sample_rate = sr
+                elif tts_engine_name == 'qwen3':
                     voice = 'clone' if prompt else 'Ryan'
                     audio, sr = engine.synthesize(text, voice=voice)
                     wav = audio
                     sample_rate = sr
+                elif tts_engine_name == 'fish':
+                    voice = 'clone' if prompt else None
+                    audio, sr = engine.synthesize(
+                        text, voice=voice, language=self.config.target_language,
+                    )
+                    wav = audio
+                    sample_rate = sr
                 elif tts_engine_name == 'piper':
+                    # Calculate length_scale to fit window without post-hoc time_stretch
+                    window_ms = int((seg.end_time - seg.start_time) * 1000)
                     wav = engine.synthesize(text)
+                    first_dur_ms = int(len(wav) / sample_rate * 1000)
+                    if first_dur_ms > window_ms and window_ms > 0:
+                        ls = max(window_ms / first_dur_ms, 0.5)
+                        logger.debug(
+                            "Seg %d: %dms TTS > %dms window, re-gen with length_scale=%.2f",
+                            seg.index, first_dur_ms, window_ms, ls,
+                        )
+                        wav = engine.synthesize(text, length_scale=ls)
                 else:  # chatterbox
                     if use_multi:
                         emotion_params = None
@@ -151,6 +333,31 @@ class DubbingPipeline:
             except Exception as e:
                 logger.warning("TTS failed for segment %d, skipping: %s", seg.index, e)
                 continue
+
+            # Post-process TTS for naturalness (skip ElevenLabs, custom config for Fish)
+            if self.config.post_process_tts and tts_engine_name != 'elevenlabs':
+                try:
+                    from audiosmith.tts_postprocessor import TTSPostProcessor, PostProcessConfig
+                    if tts_engine_name == 'fish':
+                        pp_config = PostProcessConfig(
+                            enable_silence=False, enable_dynamics=True,
+                            enable_breath=True, enable_warmth=False,
+                            enable_normalize=True, target_rms=0.14,
+                            spectral_tilt=-1.0,
+                            global_intensity=0.8,
+                        )
+                    else:
+                        pp_config = PostProcessConfig(
+                            global_intensity=self.config.post_process_intensity,
+                        )
+                    pp = TTSPostProcessor(pp_config)
+                    wav = pp.process(
+                        wav, sample_rate,
+                        text=text,
+                        emotion=seg.metadata.get('emotion'),
+                    )
+                except Exception as e:
+                    logger.warning("Post-processing failed for seg %d, using raw: %s", seg.index, e)
 
             wav_path = tts_dir / f'seg_{seg.index:04d}.wav'
             sf.write(str(wav_path), wav, sample_rate)
@@ -189,6 +396,21 @@ class DubbingPipeline:
 
         return engine, engine.sample_rate, use_multi
 
+    def _init_elevenlabs_engine(self):
+        """Initialize ElevenLabs TTS engine."""
+        from audiosmith.elevenlabs_tts import ElevenLabsTTS
+        engine = ElevenLabsTTS(
+            model_id=self.config.elevenlabs_model,
+            voice_id=self.config.elevenlabs_voice_id,
+            voice_name=self.config.elevenlabs_voice_name,
+        )
+        if self.config.audio_prompt_path:
+            engine.create_voice_clone(
+                voice_name='clone',
+                audio_files=[str(self.config.audio_prompt_path)],
+            )
+        return engine, engine.sample_rate
+
     def _init_qwen3_engine(self):
         from audiosmith.qwen3_tts import Qwen3TTS
         engine = Qwen3TTS(device=self.config.whisper_device)
@@ -202,36 +424,80 @@ class DubbingPipeline:
             engine.load_model('custom_voice')
         return engine, engine.sample_rate
 
+    _PIPER_VOICES = {
+        'en': 'en_US-lessac-medium',
+        'pl': 'pl_PL-darkman-medium',
+        'de': 'de_DE-thorsten-medium',
+    }
+
     def _init_piper_engine(self):
         from audiosmith.piper_tts import PiperTTS
-        model_path = Path.home() / '.local' / 'share' / 'piper-voices' / 'en_US-lessac-medium.onnx'
+
+        voice = self._PIPER_VOICES.get(
+            self.config.target_language, 'en_US-lessac-medium',
+        )
+        voice_dir = Path.home() / '.local' / 'share' / 'piper-voices'
+        model_path = voice_dir / f'{voice}.onnx'
+
+        if not model_path.exists():
+            available = list(voice_dir.glob('*.onnx')) if voice_dir.exists() else []
+            if available:
+                model_path = available[0]
+                logger.warning(
+                    "Piper voice '%s' not found, falling back to '%s'",
+                    voice, model_path.stem,
+                )
+            else:
+                from audiosmith.exceptions import TTSError
+                raise TTSError(f"No Piper voice models found in {voice_dir}")
+
+        logger.info("Using Piper voice: %s", model_path.stem)
         engine = PiperTTS(model_path=model_path)
+        return engine, engine.sample_rate
+
+    def _init_fish_engine(self):
+        """Initialize Fish Speech TTS (cloud API)."""
+        from audiosmith.fish_speech_tts import FishSpeechTTS
+        engine = FishSpeechTTS()
+        if self.config.audio_prompt_path:
+            engine.create_voice_clone(
+                voice_name='clone',
+                ref_audio=str(self.config.audio_prompt_path),
+            )
         return engine, engine.sample_rate
 
     # ------------------------------------------------------------------
     # Step 5: Mix audio
     # ------------------------------------------------------------------
-    def _mix_audio(self, segments: List[DubbingSegment], total_duration: float) -> Path:
+    def _mix_audio(self, segments: List[DubbingSegment], total_duration: float):
         from audiosmith.mixer import AudioMixer
 
         mixer = AudioMixer(self.config)
+        # Neural TTS (Chatterbox): prefer truncation over time_stretch distortion
+        engine = getattr(self.config, 'tts_engine', 'piper')
+        if engine in ('chatterbox', 'auto') and self.config.target_language not in self._QWEN3_LANGS:
+            mixer.max_speedup = min(mixer.max_speedup, 1.3)
         scheduled = mixer.schedule(segments)
         out_path = Path(self.config.output_dir) / 'dubbed_audio.wav'
         mixer.render_to_file(scheduled, total_duration, out_path)
-        return out_path
+        return out_path, scheduled
 
     # ------------------------------------------------------------------
     # Step 6: Encode video
     # ------------------------------------------------------------------
     def _encode_video(
         self, video_path: Path, dubbed_audio: Path, segments: List[DubbingSegment],
+        scheduled: Optional[List] = None,
     ) -> Path:
         from audiosmith.ffmpeg import encode_video
 
         srt_path = None
         if self.config.burn_subtitles:
             srt_path = Path(self.config.output_dir) / 'subtitles.srt'
-            self._write_srt(segments, srt_path)
+            if scheduled:
+                self._write_srt_from_schedule(scheduled, srt_path)
+            else:
+                self._write_srt(segments, srt_path)
 
         out_path = Path(self.config.output_dir) / f'{video_path.stem}_dubbed.mp4'
         encode_video(video_path, dubbed_audio, out_path, subtitle_path=srt_path)
@@ -293,6 +559,90 @@ class DubbingPipeline:
         ]
         entries = formatter.format_segments(raw_segments)
         write_srt(entries, path)
+
+    @staticmethod
+    def _write_srt_from_schedule(scheduled: List, path: Path) -> None:
+        """Write SRT using the mixer's actual placement times, not original segment times."""
+        from audiosmith.srt import write_srt
+        from audiosmith.srt_formatter import SRTFormatter
+
+        formatter = SRTFormatter()
+        raw_segments = [
+            {
+                'text': item.segment.translated_text or item.segment.original_text,
+                'start': item.place_at_ms / 1000.0,
+                'end': (item.place_at_ms + item.actual_duration_ms) / 1000.0,
+                'words': [],
+            }
+            for item in scheduled
+        ]
+        entries = formatter.format_segments(raw_segments)
+        write_srt(entries, path)
+
+    @staticmethod
+    def _dedup_repeated_words(text: str, max_repeats: int = 2) -> str:
+        """Collapse runs of 3+ identical consecutive words to max_repeats."""
+        words = text.split()
+        if len(words) < 3:
+            return text
+        result = [words[0]]
+        count = 1
+        for w in words[1:]:
+            if w.lower() == result[-1].lower():
+                count += 1
+                if count <= max_repeats:
+                    result.append(w)
+            else:
+                result.append(w)
+                count = 1
+        return ' '.join(result)
+
+    def _extract_speaker_voices(
+        self,
+        segments: List[DubbingSegment],
+        audio_path: Path,
+        voice_dir: Path,
+    ) -> None:
+        """Extract a representative voice sample per speaker for voice cloning."""
+        import soundfile as sf
+
+        voice_dir.mkdir(parents=True, exist_ok=True)
+        speakers: Dict[str, List[DubbingSegment]] = {}
+        for seg in segments:
+            if seg.speaker_id and seg.is_speech:
+                speakers.setdefault(seg.speaker_id, []).append(seg)
+
+        if not speakers:
+            return
+
+        audio_data, sr = sf.read(str(audio_path))
+        if audio_data.ndim == 2:
+            audio_data = audio_data.mean(axis=1)
+
+        first_voice_path = None
+        for spk_id, spk_segs in speakers.items():
+            # Pick the segment closest to 5 seconds (ideal for voice cloning)
+            best = min(spk_segs, key=lambda s: abs((s.end_time - s.start_time) - 5.0))
+            start_sample = int(best.start_time * sr)
+            end_sample = min(int(best.end_time * sr), len(audio_data))
+            clip = audio_data[start_sample:end_sample]
+            if len(clip) < sr:  # skip clips under 1 second
+                continue
+            out_path = voice_dir / f'{spk_id}.wav'
+            sf.write(str(out_path), clip, sr)
+            if first_voice_path is None:
+                first_voice_path = out_path
+            logger.info(
+                "Extracted voice sample for %s: %.1fs (%s)",
+                spk_id, len(clip) / sr, out_path.name,
+            )
+
+        # Create a default.wav symlink/copy for fallback
+        if first_voice_path:
+            default_path = voice_dir / 'default.wav'
+            if not default_path.exists():
+                import shutil
+                shutil.copy2(first_voice_path, default_path)
 
     def _save_checkpoint(self) -> None:
         self.state.save(self.checkpoint_path)
@@ -401,6 +751,14 @@ class DubbingPipeline:
                     self.state.mark_step_done(step)
                     self._save_checkpoint()
 
+            # Extract per-speaker voice samples for voice cloning
+            if self.config.diarize and not self.config.audio_prompt_path:
+                voice_dir = Path(self.config.output_dir) / 'speaker_voices'
+                if not voice_dir.exists() or not list(voice_dir.glob('*.wav')):
+                    self._extract_speaker_voices(segments, audio_path, voice_dir)
+                if list(voice_dir.glob('*.wav')):
+                    self.config.audio_prompt_path = voice_dir / 'default.wav'
+
             # Step 2.7: Detect emotion (optional)
             step = DubbingStep.DETECT_EMOTION.value
             if self.config.detect_emotion:
@@ -436,6 +794,25 @@ class DubbingPipeline:
                 self.state.mark_step_done(step)
                 self._save_checkpoint()
 
+            # Step 3.5: Merge short adjacent segments (on by default)
+            step = DubbingStep.MERGE_SEGMENTS.value
+            if self.config.merge_segments:
+                if self.state.is_step_done(step):
+                    segments = self._dicts_to_segments(self.state.segments)
+                    logger.info("Skipping %s (cached)", step)
+                else:
+                    ts = time.time()
+                    before = len(segments)
+                    segments = self._merge_segments(segments)
+                    result.step_times[step] = time.time() - ts
+                    logger.info(
+                        "Merged %d → %d segments (combined %d)",
+                        before, len(segments), before - len(segments),
+                    )
+                    self.state.segments = self._segments_to_dicts(segments)
+                    self.state.mark_step_done(step)
+                    self._save_checkpoint()
+
             # Step 4: Generate TTS
             step = DubbingStep.GENERATE_TTS.value
             if self.state.is_step_done(step):
@@ -452,13 +829,14 @@ class DubbingPipeline:
             result.segments_dubbed = sum(1 for s in segments if s.tts_audio_path)
 
             # Step 5: Mix audio
+            scheduled = None
             step = DubbingStep.MIX_AUDIO.value
             if self.state.is_step_done(step) and self.state.dubbed_audio_path:
                 dubbed_audio = Path(self.state.dubbed_audio_path)
                 logger.info("Skipping %s (cached)", step)
             else:
                 ts = time.time()
-                dubbed_audio = self._mix_audio(segments, total_duration)
+                dubbed_audio, scheduled = self._mix_audio(segments, total_duration)
                 result.step_times[step] = time.time() - ts
                 self.state.dubbed_audio_path = str(dubbed_audio)
                 self.state.mark_step_done(step)
@@ -472,7 +850,9 @@ class DubbingPipeline:
                 logger.info("Skipping %s (cached)", step)
             else:
                 ts = time.time()
-                output_video = self._encode_video(video_path, dubbed_audio, segments)
+                output_video = self._encode_video(
+                    video_path, dubbed_audio, segments, scheduled=scheduled,
+                )
                 result.step_times[step] = time.time() - ts
                 result.output_video_path = output_video
                 self.state.mark_step_done(step)

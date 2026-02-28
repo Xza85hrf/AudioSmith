@@ -21,7 +21,12 @@ class AudioMixer:
         self.sample_rate = config.dubbed_sample_rate
 
     def schedule(self, segments: List[DubbingSegment]) -> List[ScheduledSegment]:
-        """Build a sequential schedule with drift correction."""
+        """Build a schedule that keeps segments within their original time windows.
+
+        Segments are sped up (up to max_speedup) to fit.  If even max speedup
+        is not enough the audio is truncated with a fade-out so that subsequent
+        segments stay aligned with the source video.
+        """
         scheduled = []
         prev_end_ms = 0
 
@@ -38,12 +43,25 @@ class AudioMixer:
             else:
                 earliest_start = max(orig_start_ms, prev_end_ms + self.min_gap_ms)
 
-            remaining_ms = max(orig_end_ms - earliest_start, 1)
-            speed = 1.0
-            if seg.tts_duration_ms > remaining_ms:
-                speed = min(seg.tts_duration_ms / remaining_ms, self.max_speedup)
+            window_ms = max(orig_end_ms - earliest_start, 1)
 
-            actual_dur = int(seg.tts_duration_ms / speed)
+            if seg.tts_duration_ms <= window_ms:
+                # Fits naturally — no speedup needed
+                speed = 1.0
+                actual_dur = seg.tts_duration_ms
+            else:
+                needed_speed = seg.tts_duration_ms / window_ms
+                speed = min(needed_speed, self.max_speedup)
+                # Constrain to window — truncate if max speedup isn't enough
+                actual_dur = window_ms
+                if needed_speed > self.max_speedup:
+                    logger.warning(
+                        "Segment %d needs %.1fx speedup (max %.1fx), will truncate "
+                        "(%dms TTS → %dms window)",
+                        seg.index, needed_speed, self.max_speedup,
+                        seg.tts_duration_ms, window_ms,
+                    )
+
             scheduled.append(ScheduledSegment(
                 segment=seg,
                 place_at_ms=earliest_start,
@@ -55,8 +73,13 @@ class AudioMixer:
         return scheduled
 
     def render(self, scheduled: List[ScheduledSegment], total_duration_s: float) -> np.ndarray:
-        """Render scheduled segments into a float32 stereo buffer, peak-normalized to 0.95."""
+        """Render scheduled segments into a float32 stereo buffer, peak-normalized to 0.95.
+
+        Uses librosa for pitch-preserving time-stretch and proper resampling.
+        Segments that exceed their window are truncated with a 30ms fade-out.
+        """
         import soundfile as sf
+        import librosa
 
         total_samples = int(total_duration_s * self.sample_rate)
         buffer = np.zeros((total_samples, 2), dtype=np.float32)
@@ -65,33 +88,45 @@ class AudioMixer:
         for item in scheduled:
             try:
                 audio_data, file_sr = sf.read(str(item.segment.tts_audio_path))
-                samples = audio_data.astype(np.float32)
+                mono = audio_data.astype(np.float32)
+
+                # Convert to mono for processing
+                if mono.ndim == 2:
+                    mono = mono.mean(axis=1)
+
+                # Resample to target rate
+                if file_sr != self.sample_rate:
+                    mono = librosa.resample(
+                        mono, orig_sr=file_sr, target_sr=self.sample_rate,
+                    )
+
+                # Pitch-preserving time-stretch
+                if item.speed_factor > 1.01:
+                    mono = librosa.effects.time_stretch(mono, rate=item.speed_factor)
+
+                # Per-segment RMS normalization for consistent volume
+                rms = np.sqrt(np.mean(mono ** 2))
+                if rms > 1e-6:
+                    mono = mono * (0.12 / rms)  # target RMS ~0.12
+
+                # Truncate to window with fade-out
+                max_samples = int(item.actual_duration_ms / 1000 * self.sample_rate)
+                if max_samples > 0 and len(mono) > max_samples:
+                    fade_len = min(int(0.03 * self.sample_rate), max_samples // 4)
+                    mono = mono[:max_samples]
+                    if fade_len > 0:
+                        mono[-fade_len:] *= np.linspace(
+                            1.0, 0.0, fade_len, dtype=np.float32,
+                        )
 
                 # Mono -> stereo
-                if samples.ndim == 1:
-                    samples = np.column_stack([samples, samples])
-                elif samples.ndim == 2 and samples.shape[1] == 1:
-                    samples = np.column_stack([samples[:, 0], samples[:, 0]])
-
-                # Speed up if needed
-                if item.speed_factor > 1.01:
-                    new_len = int(len(samples) / item.speed_factor)
-                    if new_len > 0:
-                        indices = np.linspace(0, len(samples) - 1, new_len).astype(int)
-                        samples = samples[indices]
-
-                # Resample if needed
-                if file_sr != self.sample_rate:
-                    new_len = int(len(samples) * self.sample_rate / file_sr)
-                    if new_len > 0:
-                        indices = np.linspace(0, len(samples) - 1, new_len).astype(int)
-                        samples = samples[indices]
+                stereo = np.column_stack([mono, mono])
 
                 # Place in buffer
                 s = int(item.place_at_ms / 1000 * self.sample_rate)
-                e = min(s + len(samples), total_samples)
+                e = min(s + len(stereo), total_samples)
                 if e > s:
-                    buffer[s:e] = samples[:e - s]
+                    buffer[s:e] = stereo[:e - s]
                 rendered += 1
             except Exception as exc:
                 logger.warning("Render failed for segment %d: %s", item.segment.index, exc)

@@ -50,7 +50,8 @@ class TestDubbingStep:
         assert 'diarize' in steps
         assert 'detect_emotion' in steps
         assert 'post_process' in steps
-        assert len(steps) == 10
+        assert 'merge_segments' in steps
+        assert len(steps) == 11
 
 
 class TestPipelineState:
