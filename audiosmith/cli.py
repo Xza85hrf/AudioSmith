@@ -69,6 +69,7 @@ def info():
         ("Piper", "piper_tts", "Fast ONNX, Polish/English voices"),
         ("Chatterbox", "tts", "23 languages, zero-shot voice cloning"),
         ("Qwen3", "qwen3_tts", "Voice design, cloning, 9 premium voices, 10 languages"),
+        ("ElevenLabs", "elevenlabs_tts", "[CLOUD] 70+ languages, voice cloning, preset voices"),
     ]
     for name, mod, features in engines:
         try:
@@ -108,7 +109,7 @@ def info():
 
 
 @cli.command()
-@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3', 'all']),
+@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3', 'fish', 'elevenlabs', 'all']),
               default='all', help='Show voices for specific engine.')
 def voices(engine):
     """List available voices for each TTS engine."""
@@ -164,6 +165,41 @@ def voices(engine):
         console.print(modes)
         console.print()
 
+    if engine in ('elevenlabs', 'all'):
+        t = Table(title="[yellow]ElevenLabs TTS Voices[/yellow]", show_header=True, header_style="bold")
+        t.add_column("Name", width=14)
+        t.add_column("Voice ID", width=28)
+        try:
+            from audiosmith.elevenlabs_tts import ELEVENLABS_MODELS, VOICE_MAP
+            for name, vid in VOICE_MAP.items():
+                t.add_row(name, vid)
+        except ImportError:
+            t.add_row("—", "elevenlabs not installed")
+        console.print(t)
+
+        models_t = Table(title="[yellow]ElevenLabs Models[/yellow]", show_header=True, header_style="bold")
+        models_t.add_column("Model ID", width=28)
+        models_t.add_column("Description", width=42)
+        try:
+            for mid, desc in ELEVENLABS_MODELS.items():
+                models_t.add_row(mid, desc)
+        except NameError:
+            pass
+        console.print(models_t)
+        console.print()
+
+    if engine in ('fish', 'all'):
+        t = Table(title="[blue]Fish Speech TTS[/blue]", show_header=True, header_style="bold")
+        t.add_column("Feature", width=20)
+        t.add_column("Details", width=50)
+        t.add_row("Languages", "en, zh, ja, ko, de, fr, es, pt, ru, nl, it, pl, ar")
+        t.add_row("Voice Cloning", "10-30s reference audio, instant")
+        t.add_row("API", "Requires FISH_API_KEY env var (https://fish.audio)")
+        t.add_row("Models", "S1 (4B, best quality), S1-mini (0.5B)")
+        t.add_row("Sample Rate", "44.1 kHz")
+        console.print(t)
+        console.print()
+
 
 # ── Core commands ─────────────────────────────────────────────────────
 
@@ -177,11 +213,22 @@ def voices(engine):
 @click.option('--diarize', is_flag=True, help='Enable speaker diarization.')
 @click.option('--emotion', is_flag=True, help='Enable emotion detection for TTS.')
 @click.option('--isolate-vocals', is_flag=True, help='Isolate vocals before transcription.')
-@click.option('--engine', type=click.Choice(['chatterbox', 'qwen3', 'piper']), default='chatterbox',
-              help='TTS engine to use.')
+@click.option('--engine', type=click.Choice(['auto', 'chatterbox', 'qwen3', 'piper', 'fish', 'elevenlabs']), default='auto',
+              help='TTS engine (auto picks best for target language).')
 @click.option('--audio-prompt', default=None, type=click.Path(exists=True),
               help='Voice sample for cloning (WAV file).')
-def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, isolate_vocals, engine, audio_prompt):
+@click.option('--max-speedup', default=None, type=float,
+              help='Max TTS speedup factor (default: 2.0). Lower = less distortion.')
+@click.option('--elevenlabs-model', default=None,
+              type=click.Choice(['eleven_v3', 'eleven_multilingual_v2', 'eleven_flash_v2_5', 'eleven_turbo_v2_5']),
+              help='ElevenLabs model variant (default: eleven_v3).')
+@click.option('--elevenlabs-voice', default=None,
+              help='ElevenLabs voice name or UUID.')
+@click.option('--post-process/--no-post-process', 'post_process_tts', default=True,
+              help='Post-process local TTS for naturalness (silence, dynamics, warmth).')
+@click.option('--post-process-intensity', default=0.7, type=float,
+              help='Post-processing aggressiveness [0=off, 2=aggressive] (default: 0.7).')
+def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, isolate_vocals, engine, audio_prompt, max_speedup, elevenlabs_model, elevenlabs_voice, post_process_tts, post_process_intensity):
     """Dub a video into another language."""
     from audiosmith.models import DubbingConfig
     from audiosmith.pipeline import DubbingPipeline
@@ -191,7 +238,7 @@ def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, i
         output_dir = str(video_path.parent / f'{video_path.stem}_dubbed')
 
     try:
-        config = DubbingConfig(
+        kwargs = dict(
             video_path=video_path,
             output_dir=Path(output_dir),
             source_language=source_lang,
@@ -203,6 +250,22 @@ def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, i
             tts_engine=engine,
             audio_prompt_path=Path(audio_prompt) if audio_prompt else None,
         )
+        if max_speedup is not None:
+            kwargs['max_speedup'] = max_speedup
+        if elevenlabs_model:
+            kwargs['elevenlabs_model'] = elevenlabs_model
+        if elevenlabs_voice:
+            # Check if it looks like a UUID or a human name
+            from audiosmith.elevenlabs_tts import VOICE_MAP
+            if elevenlabs_voice in VOICE_MAP:
+                kwargs['elevenlabs_voice_name'] = elevenlabs_voice
+            else:
+                kwargs['elevenlabs_voice_id'] = elevenlabs_voice
+        kwargs['post_process_tts'] = post_process_tts
+        kwargs['post_process_intensity'] = post_process_intensity
+
+        config = DubbingConfig(**kwargs)
+        console.print(f"[dim]Engine: {engine} | Target: {target_lang} | Max speedup: {config.max_speedup}x[/dim]")
         with console.status("[bold cyan]Running dubbing pipeline...[/bold cyan]", spinner="dots"):
             pipeline = DubbingPipeline(config)
             result = pipeline.run(video_path)
@@ -529,7 +592,7 @@ def check():
 
 @cli.command()
 @click.argument('text')
-@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3']),
+@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3', 'fish', 'elevenlabs']),
               default='piper', help='TTS engine.')
 @click.option('--voice', default=None, help='Voice name (engine-specific).')
 @click.option('--output', '-o', required=True, type=click.Path(), help='Output audio file.')
@@ -543,14 +606,16 @@ def check():
 @click.option('--ref-text', default=None,
               help='Transcript of reference audio (improves Qwen3 clone quality).')
 @click.option('--interactive', '-i', is_flag=True, help='Interactive mode — prompts for missing options.')
-def tts(text, engine, voice, output, language, model_type, instruct, ref_audio, ref_text, interactive):
-    """Synthesize speech from text with Piper, Chatterbox, or Qwen3."""
+@click.option('--post-process/--no-post-process', 'post_process', default=True,
+              help='Post-process local TTS for naturalness.')
+def tts(text, engine, voice, output, language, model_type, instruct, ref_audio, ref_text, interactive, post_process):
+    """Synthesize speech from text with Piper, Chatterbox, Qwen3, or ElevenLabs."""
     import numpy as np
 
     output_path = Path(output)
 
     if interactive:
-        engine = Prompt.ask("Choose engine", choices=["piper", "chatterbox", "qwen3"], default=engine)
+        engine = Prompt.ask("Choose engine", choices=["piper", "chatterbox", "qwen3", "fish", "elevenlabs"], default=engine)
         if engine == 'qwen3':
             if not voice and not instruct and not ref_audio:
                 mode = Prompt.ask("Qwen3 mode", choices=["premium", "design", "clone"], default="premium")
@@ -625,6 +690,48 @@ def tts(text, engine, voice, output, language, model_type, instruct, ref_audio, 
             q.save_audio(audio, output_path, sr)
             sample_rate = sr
             q.cleanup()
+
+        elif engine == 'fish':
+            from audiosmith.fish_speech_tts import FishSpeechTTS
+            with console.status("[bold cyan]Calling Fish Speech API...[/bold cyan]", spinner="dots"):
+                fish = FishSpeechTTS()
+                if ref_audio:
+                    fish.create_voice_clone('clone', ref_audio=ref_audio, ref_text=ref_text)
+                audio, sr = fish.synthesize(text, voice='clone' if ref_audio else voice, language=language)
+            fish.save_audio(audio, output_path, sr)
+            sample_rate = sr
+            fish.cleanup()
+
+        elif engine == 'elevenlabs':
+            from audiosmith.elevenlabs_tts import ElevenLabsTTS
+            with console.status("[bold cyan]Calling ElevenLabs API...[/bold cyan]", spinner="dots"):
+                el = ElevenLabsTTS(voice_name=voice or 'Rachel')
+                audio, sr = el.synthesize(text)
+            el.save_audio(audio, output_path, sr)
+            sample_rate = sr
+            el.cleanup()
+
+        # Post-process TTS for naturalness (skip ElevenLabs, custom config for Fish)
+        if post_process and engine != 'elevenlabs':
+            try:
+                from audiosmith.tts_postprocessor import TTSPostProcessor, PostProcessConfig
+                if engine == 'fish':
+                    pp_config = PostProcessConfig(
+                        enable_silence=False, enable_dynamics=True,
+                        enable_breath=True, enable_warmth=False,
+                        enable_normalize=True, target_rms=0.14,
+                        spectral_tilt=-1.0,
+                        global_intensity=0.8,
+                    )
+                else:
+                    pp_config = PostProcessConfig()
+                pp = TTSPostProcessor(pp_config)
+                audio = pp.process(audio, sample_rate, text=text)
+                # Re-save with post-processed audio
+                import soundfile as sf
+                sf.write(str(output_path), audio, sample_rate)
+            except Exception as e:
+                console.print(f"[dim]Post-processing skipped: {e}[/dim]")
 
         # Result panel
         duration = len(audio) / sample_rate

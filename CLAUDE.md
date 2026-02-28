@@ -57,9 +57,19 @@ Skills do **NOT** auto-activate. Invoke with `Skill("name")` when the task match
 | `test-driven-development` | Implementing features or fixing bugs |
 | `systematic-debugging` | Errors or unexpected behavior |
 | `solid` | Writing or reviewing code quality |
-| `frontend-engineering` | Building UI components, state management, CSS, accessibility, visual quality |
+| `frontend-engineering` | Functional UI — components, state management, accessibility, responsive layouts, data-driven UIs. Use for forms, data tables, dashboards, state machines, routing, a11y. NOT for visual design or motion (use frontend-design-pro) |
+| `frontend-design-pro` | Cinematic, production-grade frontend interfaces — landing pages, hero sections, scroll storytelling, motion systems, premium aesthetics. Use when visual design quality is the primary goal. NOT for functional UI (use frontend-engineering) |
 | `backend-design` | Backend services, error handling, middleware, caching, logging, observability |
 | `finding-duplicate-functions` | Auditing for LLM-generated duplicates |
+| `remotion-video` | Programmatic video creation with React and Remotion — animations, data viz, social content |
+| `webapp-testing` | Test web applications using Playwright for UI verification, browser automation, and end-to-end testing |
+| `code-refactoring` | Improve code quality without changing behavior using proven refactoring patterns |
+| `backend-endpoint` | Create REST or GraphQL API endpoints with validation, error handling, and tests |
+| `accessibility-audit` | Audit web applications for WCAG 2.1 compliance and accessibility issues |
+| `i18n` | Implement internationalization and localization in web applications |
+| `doc-generation` | Generate Office documents (DOCX, PDF, PPTX, XLSX) programmatically from data |
+| `project-scaffolder` | Scaffold new projects with best-practice structure, tooling, and configuration |
+| `mcp-builder` | Build Model Context Protocol (MCP) servers that expose tools, resources, and prompts to AI assistants |
 | `system-architecture` | Distributed systems, microservices, API design, database design, scalability |
 | `writing-plans` | Complex multi-step tasks |
 | `brainstorming` | Starting new features |
@@ -69,15 +79,23 @@ Skills do **NOT** auto-activate. Invoke with `Skill("name")` when the task match
 | `requesting-code-review` | Before committing significant changes |
 | `receiving-code-review` | Processing code review feedback |
 | `verification-before-completion` | Before declaring work complete |
-| `using-git-worktrees` | Parallel development needed *(passive — auto-applied)* |
-| `using-tmux-for-interactive-commands` | Interactive CLI tools *(passive — auto-applied)* |
+| `using-git-worktrees` | Parallel development needed |
+| `using-tmux-for-interactive-commands` | Interactive CLI tools (vim, REPL) |
 | `executing-plans` | Following through on plans |
 | `finishing-a-development-branch` | Implementation complete, ready to integrate |
-| `daily-standup` | Use when starting a session for project briefing |
-| `using-superpowers` | Starting any conversation (skill discovery) |
-| `writing-skills` | Creating or modifying skills |
 | `learn` | Extract and persist session patterns to memory |
 | `skill-create` | Auto-generate skills from git history |
+| `daily-standup` | Use when starting a session for project briefing |
+| `overnight-dev` | Autonomous TDD development loop — runs task queue overnight with test-first workflow |
+| `changelog-automation` | Generate changelogs from git history using conventional commits and Keep a Changelog format |
+| `cicd-generator` | Generate CI/CD pipelines for GitHub Actions, GitLab CI, or other platforms |
+| `claude-md-improver` | Audit and improve CLAUDE.md quality with A-F scoring |
+| `automation-recommender` | Analyze codebase for automation opportunities — hooks, scripts, CI/CD |
+| `using-antigravity` | Frontend design, image/video gen, visual mockups via Gemini MCP + Antigravity IDE |
+| `using-superpowers` | Starting any conversation (skill discovery) |
+| `writing-skills` | Create, test, and optimize Claude Code skills with eval loops and description tuning |
+| `skill-installer` | Discover, search, and install community skills from SkillsMP marketplace |
+| `prompt-engineering` | Craft effective prompts using proven techniques — chain-of-thought, few-shot, structured output, role-play |
 <!-- SKILL-TABLE-END -->
 
 ---
