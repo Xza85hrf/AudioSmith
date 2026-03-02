@@ -219,7 +219,7 @@ class TestTrainingDataConfig:
         assert config.min_duration_s == 1.0
         assert config.max_duration_s == 20.0
         assert config.min_snr_db == 15.0
-        assert config.max_silence_pct == 30.0
+        assert config.max_silence_pct == 50.0
 
     def test_emotion_weights_match_emotions(self):
         config = TrainingDataConfig()
