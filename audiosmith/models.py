@@ -51,6 +51,11 @@ class DubbingConfig:
     cosyvoice_instruct: Optional[str] = None
     orpheus_voice: str = 'tara'
     orpheus_temperature: float = 0.7
+    f5_model: str = 'f5-polish'
+    f5_checkpoint: Optional[Path] = None
+    f5_ref_audio: Optional[Path] = None
+    f5_ref_text: Optional[str] = None
+    f5_speed: float = 1.0
     burn_subtitles: bool = True
     isolate_vocals: bool = False
     diarize: bool = False

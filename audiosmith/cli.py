@@ -112,7 +112,7 @@ def info():
 
 
 @cli.command()
-@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3', 'fish', 'elevenlabs', 'indextts', 'cosyvoice', 'orpheus', 'all']),
+@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3', 'fish', 'elevenlabs', 'indextts', 'cosyvoice', 'orpheus', 'f5', 'all']),
               default='all', help='Show voices for specific engine.')
 def voices(engine):
     """List available voices for each TTS engine."""
@@ -243,6 +243,21 @@ def voices(engine):
         console.print(t)
         console.print()
 
+    if engine in ('f5', 'all'):
+        t = Table(title="[bright_green]F5-TTS (Flow Matching)[/bright_green]", show_header=True, header_style="bold")
+        t.add_column("Feature", width=20)
+        t.add_column("Details", width=50)
+        t.add_row("Languages", "en, de, pl (Gregniuki checkpoint)")
+        t.add_row("Architecture", "Flow matching on mel spectrograms (no codec)")
+        t.add_row("Voice Cloning", "Zero-shot via reference audio + transcript")
+        t.add_row("Models", "f5-tts (base), f5-polish (Gregniuki fine-tuned)")
+        t.add_row("Fine-tunable", "Yes — audiosmith train-f5")
+        t.add_row("Sample Rate", "24 kHz")
+        t.add_row("VRAM", "~4 GB inference, ~20 GB training")
+        t.add_row("License", "CC-BY-NC-4.0 (Gregniuki checkpoint)")
+        console.print(t)
+        console.print()
+
 
 # ── Core commands ─────────────────────────────────────────────────────
 
@@ -256,7 +271,7 @@ def voices(engine):
 @click.option('--diarize', is_flag=True, help='Enable speaker diarization.')
 @click.option('--emotion', is_flag=True, help='Enable emotion detection for TTS.')
 @click.option('--isolate-vocals', is_flag=True, help='Isolate vocals before transcription.')
-@click.option('--engine', type=click.Choice(['auto', 'chatterbox', 'qwen3', 'piper', 'fish', 'elevenlabs', 'indextts', 'cosyvoice', 'orpheus']), default='auto',
+@click.option('--engine', type=click.Choice(['auto', 'chatterbox', 'qwen3', 'piper', 'fish', 'elevenlabs', 'indextts', 'cosyvoice', 'orpheus', 'f5']), default='auto',
               help='TTS engine (auto picks best for target language).')
 @click.option('--audio-prompt', default=None, type=click.Path(exists=True),
               help='Voice sample for cloning (WAV file).')
@@ -664,7 +679,7 @@ def check():
 
 @cli.command()
 @click.argument('text')
-@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3', 'fish', 'elevenlabs', 'indextts', 'cosyvoice', 'orpheus']),
+@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3', 'fish', 'elevenlabs', 'indextts', 'cosyvoice', 'orpheus', 'f5']),
               default='piper', help='TTS engine.')
 @click.option('--voice', default=None, help='Voice name (engine-specific).')
 @click.option('--output', '-o', required=True, type=click.Path(), help='Output audio file.')
@@ -817,6 +832,17 @@ def tts(text, engine, voice, output, language, model_type, instruct, ref_audio, 
             sf.write(str(output_path), audio, sr)
             sample_rate = sr
             orph.cleanup()
+
+        elif engine == 'f5':
+            from audiosmith.f5_tts import F5TTS
+            with console.status("[bold cyan]Loading F5-TTS...[/bold cyan]", spinner="dots"):
+                f5 = F5TTS()
+                if ref_audio:
+                    f5.clone_voice('clone', audio_path_or_array=ref_audio, ref_text=ref_text)
+                audio, sr = f5.synthesize(text, voice='clone' if ref_audio else None, language=language)
+            f5.save_audio(audio, output_path, sr)
+            sample_rate = sr
+            f5.cleanup()
 
         elif engine == 'elevenlabs':
             from audiosmith.elevenlabs_tts import ElevenLabsTTS
@@ -1010,6 +1036,87 @@ def train_data_gen(output_dir, stage, resume, sample_count, device, corpus,
 
         console.print(t)
         console.print("[green]Training data generation complete.[/green]")
+
+    except AudioSmithError as e:
+        console.print(f"[bold red]Error:[/bold red] {e.message}")
+        sys.exit(1)
+
+
+# ── F5-TTS fine-tuning ───────────────────────────────────────────────
+
+
+@cli.command('train-f5')
+@click.option('--data-dir', '-d', required=True, type=click.Path(exists=True),
+              help='Directory with filtered_manifest.jsonl + filtered/ audio.')
+@click.option('--output-dir', '-o', default='f5_checkpoints', type=click.Path(),
+              help='Output directory for checkpoints.')
+@click.option('--epochs', default=10, type=int, help='Training epochs.')
+@click.option('--batch-size', default=3200, type=int, help='Batch size (frames).')
+@click.option('--lr', default=7.5e-5, type=float, help='Learning rate.')
+@click.option('--resume', default=None, type=click.Path(exists=True),
+              help='Resume from checkpoint path.')
+@click.option('--prepare-only', is_flag=True,
+              help='Only prepare data (convert to F5 format), skip training.')
+@click.option('--device', default='cuda', help='Device (cuda or cpu).')
+def train_f5(data_dir, output_dir, epochs, batch_size, lr, resume, prepare_only, device):
+    """Fine-tune F5-TTS for Polish using existing training data.
+
+    Converts filtered_manifest.jsonl to F5 format, extends vocab with
+    Polish diacritics, then runs flow-matching fine-tuning from the
+    Gregniuki English/German/Polish checkpoint.
+    """
+    from audiosmith.f5_finetune import F5FineTuneConfig, F5FineTuneTrainer
+
+    try:
+        config = F5FineTuneConfig(
+            train_dir=Path(data_dir),
+            output_dir=Path(output_dir),
+            epochs=epochs,
+            batch_size_per_gpu=batch_size,
+            learning_rate=lr,
+            resume_checkpoint=Path(resume) if resume else None,
+            device=device,
+        )
+
+        trainer = F5FineTuneTrainer(config)
+
+        # Step 1: Prepare data
+        with console.status("[bold cyan]Preparing F5 training data...[/bold cyan]", spinner="dots"):
+            stats = trainer.prepare_data()
+
+        t = Table(title="Data Preparation", show_header=True, header_style="bold cyan")
+        t.add_column("Metric", width=20)
+        t.add_column("Value", width=30)
+        t.add_row("Samples", str(stats["samples"]))
+        t.add_row("Total Hours", f"{stats['total_hours']:.1f}h")
+        t.add_row("Output Dir", stats["output_dir"])
+        t.add_row("Polish Chars", ", ".join(stats.get("polish_chars_found", [])))
+        console.print(t)
+
+        if prepare_only:
+            console.print("[green]Data preparation complete (--prepare-only).[/green]")
+            return
+
+        # Step 2: Extend vocab
+        with console.status("[bold cyan]Extending vocab...[/bold cyan]", spinner="dots"):
+            vocab_path = trainer.extend_vocab()
+        config.vocab_path = vocab_path
+        console.print(f"[dim]Vocab: {vocab_path}[/dim]")
+
+        # Step 3: Train
+        console.print(Panel(
+            f"[bold]Data:[/bold] {stats['samples']} samples ({stats['total_hours']:.1f}h)\n"
+            f"[bold]Epochs:[/bold] {epochs}\n"
+            f"[bold]Batch Size:[/bold] {batch_size} frames\n"
+            f"[bold]LR:[/bold] {lr}\n"
+            f"[bold]Device:[/bold] {device}\n"
+            f"[bold]Output:[/bold] {output_dir}",
+            title="[cyan]F5-TTS Fine-Tuning[/cyan]", border_style="cyan",
+        ))
+
+        ckpt_path = trainer.train()
+        console.print(f"[bold green]Training complete![/bold green] Checkpoint: {ckpt_path}")
+        trainer.cleanup()
 
     except AudioSmithError as e:
         console.print(f"[bold red]Error:[/bold red] {e.message}")
