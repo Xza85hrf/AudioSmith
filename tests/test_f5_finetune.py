@@ -517,12 +517,13 @@ class TestF5FineTuneTrainerTrain:
         mock_torch.load.return_value = {}
         mock_get_tok = MagicMock(return_value=({}, 256))
 
-        with patch.object(trainer, "_get_torch", return_value=mock_torch):
-            with patch.object(trainer, "_import_f5_training", return_value=(MagicMock(), MagicMock(), mock_get_tok, MagicMock())):
-                with patch.object(trainer, "_download_vocab", return_value=Path("/fake/vocab")):
-                    with patch.object(trainer, "_download_checkpoint", return_value=Path("/fake/ckpt")):
-                        with pytest.raises(TrainingError) as exc_info:
-                            trainer.train()
+        with patch.object(trainer, "_get_torch", return_value=mock_torch), \
+             patch.object(trainer, "_import_f5_training", return_value=(MagicMock(), MagicMock(), mock_get_tok, MagicMock())), \
+             patch.object(trainer, "_download_vocab", return_value=Path("/fake/vocab")), \
+             patch.object(trainer, "_download_checkpoint", return_value=Path("/fake/ckpt")), \
+             patch("audiosmith.f5_finetune.shutil") as mock_shutil:
+            with pytest.raises(TrainingError) as exc_info:
+                trainer.train()
 
         assert exc_info.value.error_code == "F5_TRAIN_DATA_ERR"
 

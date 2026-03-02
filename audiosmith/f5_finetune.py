@@ -22,6 +22,7 @@ import gc
 import json
 import logging
 import os
+import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -147,11 +148,19 @@ class F5FineTuneTrainer:
         written = 0
         missing_polish = set()
         metadata_lines: List[str] = []
+        arrow_records: List[Dict[str, Any]] = []
+        duration_list: List[float] = []
 
         for entry in entries:
-            audio_path = Path(entry["audio"])
+            # Support both formats: {"audio": "path.wav"} and {"id": "name"}
+            if "audio" in entry:
+                audio_path = Path(entry["audio"])
+            elif "id" in entry:
+                audio_path = manifest_jsonl.parent / "filtered" / f"{entry['id']}.wav"
+            else:
+                continue
             text = entry.get("text", "").strip()
-            duration = entry.get("duration", 0.0)
+            duration = entry.get("duration", entry.get("duration_s", 0.0))
 
             if not text or not audio_path.exists():
                 continue
@@ -173,11 +182,12 @@ class F5FineTuneTrainer:
                 try:
                     link_path.symlink_to(audio_path.resolve())
                 except OSError:
-                    # Fallback: copy if symlink fails (e.g. cross-device)
-                    import shutil
                     shutil.copy2(str(audio_path), str(link_path))
 
+            abs_audio = str(link_path.resolve())
             metadata_lines.append(f"{basename}|{text}")
+            arrow_records.append({"audio_path": abs_audio, "text": text, "duration": duration})
+            duration_list.append(duration)
             total_duration += duration
             written += 1
 
@@ -185,6 +195,9 @@ class F5FineTuneTrainer:
         metadata_path = out_dir / "metadata.csv"
         with open(metadata_path, "w", encoding="utf-8") as f:
             f.write("\n".join(metadata_lines) + "\n")
+
+        # Write raw.arrow + duration.json (F5-TTS dataset format)
+        self._write_arrow_dataset(out_dir, arrow_records, duration_list)
 
         total_hours = total_duration / 3600.0
         logger.info(
@@ -199,6 +212,35 @@ class F5FineTuneTrainer:
             "metadata_path": str(metadata_path),
             "polish_chars_found": sorted(missing_polish),
         }
+
+    def _write_arrow_dataset(
+        self,
+        out_dir: Path,
+        records: List[Dict[str, Any]],
+        durations: List[float],
+    ) -> None:
+        """Write raw.arrow + duration.json for F5-TTS dataset loading."""
+        try:
+            from datasets.arrow_writer import ArrowWriter
+        except ImportError:
+            raise TrainingError(
+                "datasets not installed. Install: pip install datasets",
+                error_code="F5_TRAIN_IMPORT_ERR",
+            )
+
+        arrow_path = out_dir / "raw.arrow"
+        with ArrowWriter(path=str(arrow_path)) as writer:
+            for record in records:
+                writer.write(record)
+            writer.finalize()
+
+        dur_path = out_dir / "duration.json"
+        with open(dur_path, "w", encoding="utf-8") as f:
+            json.dump({"duration": durations}, f, ensure_ascii=False)
+
+        logger.info(
+            "Wrote arrow dataset: %d records → %s", len(records), arrow_path,
+        )
 
     def extend_vocab(self, base_vocab_path: Optional[Path] = None) -> Path:
         """Ensure Polish diacritics are present in the vocab file.
@@ -248,6 +290,10 @@ class F5FineTuneTrainer:
     def train(self) -> Path:
         """Run F5-TTS fine-tuning.
 
+        Uses the F5-TTS Trainer which auto-loads pretrained_*.pt files
+        from checkpoint_path. We copy the base checkpoint there before
+        creating the Trainer.
+
         Returns:
             Path to the output checkpoint directory.
         """
@@ -264,35 +310,40 @@ class F5FineTuneTrainer:
         if vocab_path is None:
             vocab_path = self._download_vocab()
 
-        # Get tokenizer
         vocab_char_map, vocab_size = get_tokenizer(
-            str(vocab_path), tokenizer_type="custom",
+            str(vocab_path), tokenizer="custom",
         )
         logger.info("Vocab size: %d", vocab_size)
 
-        # Build model
-        model = self._build_model(CFM, DiT, vocab_size)
-
-        # Load base checkpoint weights
+        # Copy base checkpoint to output dir (Trainer auto-discovers pretrained_*)
         ckpt_path = self._download_checkpoint()
-        state_dict = torch.load(str(ckpt_path), map_location=self.config.device, weights_only=True)
-        if "ema_model_state_dict" in state_dict:
-            state_dict = state_dict["ema_model_state_dict"]
-        model.load_state_dict(state_dict, strict=False)
-        logger.info("Loaded base checkpoint: %s", ckpt_path)
+        pretrained_name = f"pretrained_{ckpt_path.name}"
+        pretrained_dest = self.config.output_dir / pretrained_name
+        if not pretrained_dest.exists():
+            shutil.copy2(str(ckpt_path), str(pretrained_dest))
+            logger.info("Copied base checkpoint → %s", pretrained_dest)
 
-        # Resume if requested
+        # Handle resume checkpoint
         if self.config.resume_checkpoint and self.config.resume_checkpoint.exists():
-            resume_dict = torch.load(
-                str(self.config.resume_checkpoint),
-                map_location=self.config.device, weights_only=True,
-            )
-            if "ema_model_state_dict" in resume_dict:
-                resume_dict = resume_dict["ema_model_state_dict"]
-            model.load_state_dict(resume_dict, strict=False)
-            logger.info("Resumed from: %s", self.config.resume_checkpoint)
+            resume_dest = self.config.output_dir / self.config.resume_checkpoint.name
+            if not resume_dest.exists():
+                shutil.copy2(str(self.config.resume_checkpoint), str(resume_dest))
+            logger.info("Resume checkpoint: %s", resume_dest)
 
-        # Resolve training data directory
+        # Mel spec config (shared by model + dataset)
+        mel_spec_kwargs = dict(
+            n_fft=F5_MEL_CONFIG["n_fft"],
+            hop_length=self.config.hop_length,
+            win_length=F5_MEL_CONFIG["win_length"],
+            n_mel_channels=self.config.n_mel_channels,
+            target_sample_rate=self.config.target_sample_rate,
+            mel_spec_type="vocos",
+        )
+
+        # Build model
+        model = self._build_model(CFM, DiT, vocab_size, vocab_char_map, mel_spec_kwargs)
+
+        # Load dataset from arrow format
         train_data_dir = self.config.train_dir
         if train_data_dir is None:
             raise TrainingError(
@@ -300,13 +351,17 @@ class F5FineTuneTrainer:
                 error_code="F5_TRAIN_DATA_ERR",
             )
 
-        # Check for f5_format subdir with metadata.csv
         f5_dir = train_data_dir / "f5_format"
-        if not (f5_dir / "metadata.csv").exists():
+        arrow_path = f5_dir / "raw.arrow"
+        dur_path = f5_dir / "duration.json"
+        if not arrow_path.exists() or not dur_path.exists():
             raise TrainingError(
-                f"No metadata.csv in {f5_dir}. Run prepare_data() first.",
+                f"No raw.arrow/duration.json in {f5_dir}. Run prepare_data() first.",
                 error_code="F5_TRAIN_DATA_ERR",
             )
+
+        train_dataset = self._load_dataset(arrow_path, dur_path, mel_spec_kwargs)
+        logger.info("Loaded %d training samples", len(train_dataset))
 
         # Create trainer
         trainer = Trainer(
@@ -321,6 +376,7 @@ class F5FineTuneTrainer:
             max_samples=self.config.max_samples,
             grad_accumulation_steps=self.config.grad_accumulation_steps,
             logger="tensorboard",
+            mel_spec_type="vocos",
         )
         self._trainer = trainer
 
@@ -332,7 +388,7 @@ class F5FineTuneTrainer:
 
         try:
             trainer.train(
-                train_dataset=str(f5_dir),
+                train_dataset,
                 resumable_with_seed=42,
             )
         except Exception as e:
@@ -353,7 +409,10 @@ class F5FineTuneTrainer:
 
         return self.config.output_dir
 
-    def _build_model(self, CFM: Any, DiT: Any, vocab_size: int) -> Any:
+    def _build_model(
+        self, CFM: Any, DiT: Any, vocab_size: int,
+        vocab_char_map: Any = None, mel_spec_kwargs: Optional[Dict] = None,
+    ) -> Any:
         """Build CFM model with DiT backbone."""
         model_cfg = {
             **F5_MODEL_CONFIG,
@@ -361,19 +420,45 @@ class F5FineTuneTrainer:
             "mel_dim": self.config.n_mel_channels,
         }
         transformer = DiT(**model_cfg)
-        model = CFM(
-            transformer=transformer,
-            mel_spec_kwargs=dict(
+        if mel_spec_kwargs is None:
+            mel_spec_kwargs = dict(
                 n_fft=F5_MEL_CONFIG["n_fft"],
                 hop_length=self.config.hop_length,
                 win_length=F5_MEL_CONFIG["win_length"],
                 n_mel_channels=self.config.n_mel_channels,
                 target_sample_rate=self.config.target_sample_rate,
-            ),
-            mel_spec_type="vocos",
-            vocab_char_map=None,  # Trainer handles this
+                mel_spec_type="vocos",
+            )
+        model = CFM(
+            transformer=transformer,
+            mel_spec_kwargs=mel_spec_kwargs,
+            vocab_char_map=vocab_char_map,
         )
         return model
+
+    def _load_dataset(
+        self, arrow_path: Path, dur_path: Path, mel_spec_kwargs: Dict,
+    ) -> Any:
+        """Load training dataset from arrow format."""
+        try:
+            from datasets import Dataset as HFDataset
+            from f5_tts.model.dataset import CustomDataset
+        except ImportError:
+            raise TrainingError(
+                "datasets or f5-tts not installed",
+                error_code="F5_TRAIN_IMPORT_ERR",
+            )
+
+        raw_data = HFDataset.from_file(str(arrow_path))
+        with open(dur_path, "r", encoding="utf-8") as f:
+            durations = json.load(f)["duration"]
+
+        return CustomDataset(
+            raw_data,
+            durations=durations,
+            preprocessed_mel=False,
+            **mel_spec_kwargs,
+        )
 
     def _validate_config(self) -> None:
         """Validate training config before starting."""
