@@ -862,3 +862,30 @@ class TrainingDataGenerator:
             info["corpus_sentences"] = lines
 
         return info
+
+    def export_for_f5(self, output_dir: Optional[Path] = None) -> Path:
+        """Export filtered training data in F5-TTS format.
+
+        Reads filtered_manifest.jsonl, writes metadata.csv (pipe-delimited)
+        and symlinks audio files into an audio/ subdirectory.
+
+        Args:
+            output_dir: Output directory. Defaults to train_dir/f5_format.
+
+        Returns:
+            Path to the output directory containing metadata.csv + audio/.
+        """
+        from audiosmith.f5_finetune import F5FineTuneConfig, F5FineTuneTrainer
+
+        config = F5FineTuneConfig(train_dir=self.config.output_dir)
+        trainer = F5FineTuneTrainer(config)
+        manifest = self.config.output_dir / "filtered_manifest.jsonl"
+        stats = trainer.prepare_data(
+            manifest_jsonl=manifest,
+            output_dir=output_dir,
+        )
+        logger.info(
+            "Exported %d samples (%.1fh) for F5-TTS → %s",
+            stats["samples"], stats["total_hours"], stats["output_dir"],
+        )
+        return Path(stats["output_dir"])

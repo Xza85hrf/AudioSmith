@@ -55,6 +55,12 @@ _ENGINE_PP_PRESETS: Dict[str, Dict] = {
         enable_warmth=True, enable_spectral_matching=True,
         enable_micro_dynamics=True, spectral_intensity=0.5,
     ),
+    'f5': dict(
+        enable_silence=True, enable_dynamics=True, enable_breath=True,
+        enable_warmth=False, enable_spectral_matching=True,
+        enable_micro_dynamics=True, enable_normalize=True,
+        target_rms_adaptive=True, spectral_intensity=0.5,
+    ),
     'indextts': dict(
         enable_silence=False, enable_dynamics=False, enable_breath=False,
         enable_warmth=False, enable_spectral_matching=False,
@@ -347,6 +353,8 @@ class DubbingPipeline:
             engine, sample_rate = self._init_cosyvoice_engine()
         elif tts_engine_name == 'orpheus':
             engine, sample_rate = self._init_orpheus_engine()
+        elif tts_engine_name == 'f5':
+            engine, sample_rate = self._init_f5_engine()
         elif tts_engine_name == 'piper':
             engine, sample_rate = self._init_piper_engine()
         else:
@@ -410,6 +418,14 @@ class DubbingPipeline:
                     audio, sr = engine.synthesize(
                         text, voice=voice, language=self.config.target_language,
                         emotion=emotion_name,
+                    )
+                    wav = audio
+                    sample_rate = sr
+                elif tts_engine_name == 'f5':
+                    voice = 'clone' if prompt else None
+                    audio, sr = engine.synthesize(
+                        text, voice=voice, language=self.config.target_language,
+                        speed=self.config.f5_speed,
                     )
                     wav = audio
                     sample_rate = sr
@@ -558,6 +574,22 @@ class DubbingPipeline:
 
         logger.info("Using Piper voice: %s", model_path.stem)
         engine = PiperTTS(model_path=model_path)
+        return engine, engine.sample_rate
+
+    def _init_f5_engine(self):
+        """Initialize F5-TTS engine (local, flow-matching)."""
+        from audiosmith.f5_tts import F5TTS
+        engine = F5TTS(
+            model_name=self.config.f5_model,
+            device=self.config.whisper_device,
+            checkpoint_path=str(self.config.f5_checkpoint) if self.config.f5_checkpoint else None,
+        )
+        if self.config.audio_prompt_path:
+            engine.clone_voice(
+                'clone',
+                audio_path_or_array=str(self.config.audio_prompt_path),
+                ref_text=self.config.f5_ref_text,
+            )
         return engine, engine.sample_rate
 
     def _init_fish_engine(self):
