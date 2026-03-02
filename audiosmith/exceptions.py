@@ -92,3 +92,8 @@ class DocumentFormattingError(ProcessingError):
 class BatchProcessingError(ProcessingError):
     def __init__(self, message, error_code=None, details=None, original_error=None):
         super().__init__(message, error_code or "BATCH_ERR", details, original_error)
+
+
+class TrainingError(ProcessingError):
+    def __init__(self, message, error_code=None, details=None, original_error=None):
+        super().__init__(message, error_code or "TRAIN_ERR", details, original_error)

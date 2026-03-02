@@ -45,14 +45,25 @@ test-files/videos/dubbed_output/
 # Environment
 .env
 
-# Claude Code internals
-.claude/.delegation-token
-.claude/.context-budget-counter
-.claude/.context-budget-weight
-.claude/context-snapshot.json
-.claude/pre-compact-state.md
-.claude/session-log.txt
-.claude/worker-performance.log
+# Claude Code (all agent tooling)
+.claude/
+.claude-plugin/
+
+# MCP server config (may contain API endpoints)
+.mcp.json
+
+# Serena IDE integration
+.serena/
+
+# Claude context modes & launch (personal workflow)
+contexts/
+launch-claude.sh
+
+# Output artifacts
+output/
+
+# Test working files
+test-files/
 
 # Session handoffs (auto-generated)
 docs/session-handoffs/
