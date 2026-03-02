@@ -30,6 +30,63 @@ _EMOTION_TTS_MAP: Dict[str, Dict[str, float]] = {
 }
 
 
+# Per-engine post-processing presets (calibrated to match ElevenLabs quality)
+_ENGINE_PP_PRESETS: Dict[str, Dict] = {
+    'piper': dict(
+        enable_silence=True, enable_dynamics=True, enable_breath=True,
+        enable_warmth=False, enable_spectral_matching=True,
+        enable_micro_dynamics=True, enable_normalize=True,
+        target_rms_adaptive=True, spectral_intensity=0.8,
+    ),
+    'chatterbox': dict(
+        enable_silence=True, enable_dynamics=True, enable_breath=True,
+        enable_warmth=True, enable_spectral_matching=True,
+        enable_micro_dynamics=True, spectral_intensity=0.6,
+    ),
+    'fish': dict(
+        enable_silence=False, enable_dynamics=True, enable_breath=True,
+        enable_warmth=False, enable_spectral_matching=True,
+        enable_micro_dynamics=False, enable_normalize=True,
+        enable_silence_trim=True, max_silence_ms=100,
+        target_rms_adaptive=True, spectral_intensity=0.5,
+    ),
+    'qwen3': dict(
+        enable_silence=True, enable_dynamics=True, enable_breath=True,
+        enable_warmth=True, enable_spectral_matching=True,
+        enable_micro_dynamics=True, spectral_intensity=0.5,
+    ),
+    'indextts': dict(
+        enable_silence=False, enable_dynamics=False, enable_breath=False,
+        enable_warmth=False, enable_spectral_matching=False,
+        enable_micro_dynamics=False, enable_normalize=False,
+    ),
+    'cosyvoice': dict(
+        enable_silence=False, enable_dynamics=False, enable_breath=False,
+        enable_warmth=False, enable_spectral_matching=False,
+        enable_micro_dynamics=False, enable_normalize=True,
+    ),
+    'orpheus': dict(
+        enable_silence=False, enable_dynamics=False, enable_breath=False,
+        enable_warmth=False, enable_spectral_matching=False,
+        enable_micro_dynamics=False, enable_normalize=True,
+    ),
+}
+
+
+# Per-language post-processing overrides (stronger correction for non-English)
+_LANGUAGE_PP_OVERRIDES: Dict[str, Dict[str, Any]] = {
+    'pl': {
+        'spectral_intensity': 0.3,
+        'enable_spectral_matching': True,
+        'enable_dynamics': True,
+        'enable_breath': False,
+        'enable_normalize': True,
+        'target_rms_adaptive': False,
+        'target_rms': 0.13,
+    },
+}
+
+
 def _emotion_to_tts_params(emotion: str, intensity: float = 0.5) -> Dict[str, float]:
     """Convert emotion label + intensity to Chatterbox TTS parameters."""
     params = _EMOTION_TTS_MAP.get(emotion, {'exaggeration': 0.5, 'cfg_weight': 0.5})
@@ -220,6 +277,9 @@ class DubbingPipeline:
     _QWEN3_LANGS = {'en', 'zh', 'ja', 'ko', 'de', 'fr', 'ru', 'pt', 'es', 'it'}
     _PIPER_LANGS = {'en', 'pl', 'de'}
     _FISH_LANGS = {'en', 'zh', 'ja', 'ko', 'de', 'fr', 'es', 'pt', 'ru', 'nl', 'it', 'pl', 'ar'}
+    _INDEXTTS_LANGS = {'en', 'zh'}
+    _COSYVOICE_LANGS = {'zh', 'en', 'ja', 'ko', 'de', 'es', 'fr', 'it', 'ru'}
+    _ORPHEUS_LANGS = {'en', 'zh', 'es', 'fr', 'de', 'it', 'pt', 'hi', 'ko', 'tr', 'ja', 'th', 'ar'}
     _ELEVENLABS_LANGS = {
         'en', 'es', 'de', 'fr', 'it', 'pt', 'pl', 'ru', 'ja', 'ko', 'zh',
         'ar', 'bg', 'cs', 'da', 'nl', 'fi', 'el', 'hi', 'hu', 'id', 'ms',
@@ -237,6 +297,15 @@ class DubbingPipeline:
         if os.getenv('FISH_API_KEY') and target in self._FISH_LANGS:
             logger.info("Auto-selected Fish Speech TTS for '%s' (API key present)", target)
             return 'fish'
+        if self.config.cosyvoice_model_dir and target in self._COSYVOICE_LANGS:
+            logger.info("Auto-selected CosyVoice2 for '%s' (local, highest MOS)", target)
+            return 'cosyvoice'
+        if self.config.detect_emotion and target in self._INDEXTTS_LANGS:
+            logger.info("Auto-selected IndexTTS-2 for '%s' (emotion-aware)", target)
+            return 'indextts'
+        if target in self._ORPHEUS_LANGS:
+            logger.info("Auto-selected Orpheus TTS for '%s' (expressive local)", target)
+            return 'orpheus'
         if target in self._QWEN3_LANGS:
             logger.info("Auto-selected Qwen3 TTS for '%s'", target)
             return 'qwen3'
@@ -272,6 +341,12 @@ class DubbingPipeline:
             engine, sample_rate = self._init_qwen3_engine()
         elif tts_engine_name == 'fish':
             engine, sample_rate = self._init_fish_engine()
+        elif tts_engine_name == 'indextts':
+            engine, sample_rate = self._init_indextts_engine()
+        elif tts_engine_name == 'cosyvoice':
+            engine, sample_rate = self._init_cosyvoice_engine()
+        elif tts_engine_name == 'orpheus':
+            engine, sample_rate = self._init_orpheus_engine()
         elif tts_engine_name == 'piper':
             engine, sample_rate = self._init_piper_engine()
         else:
@@ -297,8 +372,44 @@ class DubbingPipeline:
                     sample_rate = sr
                 elif tts_engine_name == 'fish':
                     voice = 'clone' if prompt else None
+                    emotion_name = None
+                    emo_data = seg.metadata.get('emotion')
+                    if emo_data:
+                        emotion_name = emo_data.get('primary')
                     audio, sr = engine.synthesize(
                         text, voice=voice, language=self.config.target_language,
+                        emotion=emotion_name,
+                    )
+                    wav = audio
+                    sample_rate = sr
+                elif tts_engine_name == 'indextts':
+                    voice = 'clone' if prompt else None
+                    emotion_prompt = self.config.indextts_emotion_prompt
+                    target_dur = seg.duration_ms if seg.duration_ms > 0 else None
+                    audio, sr = engine.synthesize(
+                        text, voice=voice, language=self.config.target_language,
+                        emotion_prompt=emotion_prompt,
+                        target_duration_ms=target_dur,
+                    )
+                    wav = audio
+                    sample_rate = sr
+                elif tts_engine_name == 'cosyvoice':
+                    voice = 'clone' if prompt else None
+                    audio, sr = engine.synthesize(
+                        text, voice=voice, language=self.config.target_language,
+                        instruct=self.config.cosyvoice_instruct,
+                    )
+                    wav = audio
+                    sample_rate = sr
+                elif tts_engine_name == 'orpheus':
+                    voice = 'clone' if prompt else self.config.orpheus_voice
+                    emotion_name = None
+                    emo_data = seg.metadata.get('emotion')
+                    if emo_data:
+                        emotion_name = emo_data.get('primary')
+                    audio, sr = engine.synthesize(
+                        text, voice=voice, language=self.config.target_language,
+                        emotion=emotion_name,
                     )
                     wav = audio
                     sample_rate = sr
@@ -334,27 +445,21 @@ class DubbingPipeline:
                 logger.warning("TTS failed for segment %d, skipping: %s", seg.index, e)
                 continue
 
-            # Post-process TTS for naturalness (skip ElevenLabs, custom config for Fish)
-            if self.config.post_process_tts and tts_engine_name != 'elevenlabs':
+            # Post-process TTS for naturalness (skip cloud/emotion-native engines)
+            if self.config.post_process_tts and tts_engine_name not in ('elevenlabs', 'indextts', 'cosyvoice', 'orpheus'):
                 try:
                     from audiosmith.tts_postprocessor import TTSPostProcessor, PostProcessConfig
-                    if tts_engine_name == 'fish':
-                        pp_config = PostProcessConfig(
-                            enable_silence=False, enable_dynamics=True,
-                            enable_breath=True, enable_warmth=False,
-                            enable_normalize=True, target_rms=0.14,
-                            spectral_tilt=-1.0,
-                            global_intensity=0.8,
-                        )
-                    else:
-                        pp_config = PostProcessConfig(
-                            global_intensity=self.config.post_process_intensity,
-                        )
+                    preset = _ENGINE_PP_PRESETS.get(tts_engine_name, {}).copy()
+                    lang_overrides = _LANGUAGE_PP_OVERRIDES.get(self.config.target_language, {})
+                    preset.update(lang_overrides)
+                    preset['global_intensity'] = self.config.post_process_intensity
+                    pp_config = PostProcessConfig(**preset)
                     pp = TTSPostProcessor(pp_config)
                     wav = pp.process(
                         wav, sample_rate,
                         text=text,
                         emotion=seg.metadata.get('emotion'),
+                        language=self.config.target_language,
                     )
                 except Exception as e:
                     logger.warning("Post-processing failed for seg %d, using raw: %s", seg.index, e)
@@ -464,6 +569,40 @@ class DubbingPipeline:
                 voice_name='clone',
                 ref_audio=str(self.config.audio_prompt_path),
             )
+        return engine, engine.sample_rate
+
+    def _init_indextts_engine(self):
+        """Initialize IndexTTS-2 engine (local, emotion-aware EN/ZH)."""
+        from audiosmith.indextts_tts import IndexTTS2TTS
+        engine = IndexTTS2TTS(
+            model_variant=self.config.indextts_model,
+            device=self.config.whisper_device,
+            emo_alpha=self.config.indextts_emo_alpha,
+        )
+        if self.config.audio_prompt_path:
+            engine.create_voice_clone('clone', ref_audio=self.config.audio_prompt_path)
+        return engine, engine.sample_rate
+
+    def _init_cosyvoice_engine(self):
+        """Initialize CosyVoice2 engine (local, highest MOS)."""
+        from audiosmith.cosyvoice_tts import CosyVoice2TTS
+        engine = CosyVoice2TTS(
+            model_dir=self.config.cosyvoice_model_dir,
+            device=self.config.whisper_device,
+        )
+        if self.config.audio_prompt_path:
+            engine.create_voice_clone('clone', ref_audio=self.config.audio_prompt_path)
+        return engine, engine.sample_rate
+
+    def _init_orpheus_engine(self):
+        """Initialize Orpheus TTS engine (local, expressive)."""
+        from audiosmith.orpheus_tts import OrpheusTTS
+        engine = OrpheusTTS(
+            voice=self.config.orpheus_voice,
+            temperature=self.config.orpheus_temperature,
+        )
+        if self.config.audio_prompt_path:
+            engine.create_voice_clone('clone', ref_audio=self.config.audio_prompt_path)
         return engine, engine.sample_rate
 
     # ------------------------------------------------------------------

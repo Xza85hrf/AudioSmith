@@ -375,6 +375,14 @@ def main():
             spectral_tilt=-1.0,
             global_intensity=0.8,
         ),
+        "Fish-v5e": PostProcessConfig(
+            enable_silence=False, enable_dynamics=True, enable_breath=True,
+            enable_warmth=False, enable_spectral_matching=True,
+            enable_micro_dynamics=False, enable_normalize=True,
+            enable_silence_trim=True, max_silence_ms=100,
+            target_rms_adaptive=True, spectral_intensity=0.5,
+            global_intensity=0.7,
+        ),
     }
 
     variants = {"Raw": fish_raw}

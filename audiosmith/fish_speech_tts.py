@@ -114,6 +114,7 @@ class FishSpeechTTS:
         text: str,
         voice: Optional[str] = None,
         language: Optional[str] = None,
+        emotion: Optional[str] = None,
     ) -> Tuple[np.ndarray, int]:
         """Synthesize text to audio.
 
@@ -121,12 +122,19 @@ class FishSpeechTTS:
             text: Text to synthesize.
             voice: Voice name (looks up cloned voices) or reference_id.
             language: Language code (ISO 639-1).
+            emotion: Emotion marker (e.g. 'angry', 'sad', 'excited').
+                Fish Speech natively supports 45+ emotion markers across
+                all languages. The marker is prepended as ``(emotion) text``.
 
         Returns:
             Tuple of (audio_array float32, sample_rate).
         """
         if not text or not text.strip():
             raise TTSError("Text cannot be empty", error_code="FISH_TEXT_ERR")
+
+        # Inject emotion marker — Fish Speech processes these natively
+        if emotion:
+            text = f"({emotion}) {text}"
 
         self._ensure_client()
 

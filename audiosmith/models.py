@@ -44,6 +44,13 @@ class DubbingConfig:
     elevenlabs_model: str = 'eleven_v3'
     elevenlabs_voice_id: Optional[str] = None
     elevenlabs_voice_name: Optional[str] = None
+    indextts_model: str = 'base'
+    indextts_emo_alpha: float = 0.5
+    indextts_emotion_prompt: Optional[Path] = None
+    cosyvoice_model_dir: Optional[str] = None
+    cosyvoice_instruct: Optional[str] = None
+    orpheus_voice: str = 'tara'
+    orpheus_temperature: float = 0.7
     burn_subtitles: bool = True
     isolate_vocals: bool = False
     diarize: bool = False

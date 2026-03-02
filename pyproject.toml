@@ -28,10 +28,13 @@ qwen3 = ["qwen-tts>=0.1"]
 piper = ["piper-tts>=1.2"]
 elevenlabs = ["elevenlabs>=1.0"]
 fish = ["fish-audio-sdk>=0.2.0"]
+indextts = ["indextts>=0.1"]
+cosyvoice = ["cosyvoice>=0.1"]
+orpheus = ["orpheus-speech>=0.1"]
 docs = ["fpdf2>=2.7", "python-docx>=1.0"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0"]
 all = [
-    "audiosmith[quality,gemma,qwen3,piper,elevenlabs,fish,docs]",
+    "audiosmith[quality,gemma,qwen3,piper,elevenlabs,fish,indextts,cosyvoice,orpheus,docs]",
 ]
 ci = [
     "click>=8.1",

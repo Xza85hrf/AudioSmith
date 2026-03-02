@@ -70,6 +70,9 @@ def info():
         ("Chatterbox", "tts", "23 languages, zero-shot voice cloning"),
         ("Qwen3", "qwen3_tts", "Voice design, cloning, 9 premium voices, 10 languages"),
         ("ElevenLabs", "elevenlabs_tts", "[CLOUD] 70+ languages, voice cloning, preset voices"),
+        ("IndexTTS-2", "indextts_tts", "Emotion disentanglement, EN/ZH, voice cloning"),
+        ("CosyVoice2", "cosyvoice_tts", "MOS 5.53, 9 languages, zero-shot cloning, instruct"),
+        ("Orpheus", "orpheus_tts", "13 languages, 8 voices, emotion tags, expressive"),
     ]
     for name, mod, features in engines:
         try:
@@ -109,7 +112,7 @@ def info():
 
 
 @cli.command()
-@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3', 'fish', 'elevenlabs', 'all']),
+@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3', 'fish', 'elevenlabs', 'indextts', 'cosyvoice', 'orpheus', 'all']),
               default='all', help='Show voices for specific engine.')
 def voices(engine):
     """List available voices for each TTS engine."""
@@ -188,6 +191,46 @@ def voices(engine):
         console.print(models_t)
         console.print()
 
+    if engine in ('indextts', 'all'):
+        t = Table(title="[red]IndexTTS-2[/red]", show_header=True, header_style="bold")
+        t.add_column("Feature", width=20)
+        t.add_column("Details", width=50)
+        t.add_row("Languages", "en, zh (English + Chinese only)")
+        t.add_row("Voice Cloning", "Zero-shot from reference audio (10-30s)")
+        t.add_row("Emotion", "Disentangled — independent timbre/emotion control")
+        t.add_row("Emotion Alpha", "0.0 = speaker identity, 1.0 = emotion transfer")
+        t.add_row("Models", "base (standard), design (voice design)")
+        t.add_row("Vocoder", "BigVGAN-v2, 24 kHz output")
+        t.add_row("VRAM", "~8 GB (5.9 GB model)")
+        console.print(t)
+        console.print()
+
+    if engine in ('cosyvoice', 'all'):
+        t = Table(title="[bright_cyan]CosyVoice2[/bright_cyan]", show_header=True, header_style="bold")
+        t.add_column("Feature", width=20)
+        t.add_column("Details", width=50)
+        t.add_row("Languages", "zh, en, ja, ko, de, es, fr, it, ru (9 languages)")
+        t.add_row("MOS Score", "5.53 (highest reported open-source)")
+        t.add_row("Parameters", "0.5B (~4 GB VRAM)")
+        t.add_row("Voice Cloning", "Zero-shot (ref audio + transcript recommended)")
+        t.add_row("Instruct Mode", 'Emotion/dialect via text (e.g. "Speak happily")')
+        t.add_row("Cross-Lingual", "Voice transfer across 9 languages")
+        t.add_row("Sample Rate", "22050 Hz")
+        console.print(t)
+        console.print()
+
+    if engine in ('orpheus', 'all'):
+        t = Table(title="[bright_magenta]Orpheus TTS[/bright_magenta]", show_header=True, header_style="bold")
+        t.add_column("Feature", width=20)
+        t.add_column("Details", width=50)
+        t.add_row("Languages", "en, zh, es, fr, de, it, pt, hi, ko, tr, ja, th, ar (13)")
+        t.add_row("Preset Voices", "tara, leah, jess, leo, dan, mia, zac, zoe")
+        t.add_row("Emotion Tags", "<laugh>, <sigh>, <gasp>, <cough>, <groan>, <yawn>")
+        t.add_row("Parameters", "3B (~15 GB VRAM, requires vLLM)")
+        t.add_row("Sample Rate", "24000 Hz")
+        console.print(t)
+        console.print()
+
     if engine in ('fish', 'all'):
         t = Table(title="[blue]Fish Speech TTS[/blue]", show_header=True, header_style="bold")
         t.add_column("Feature", width=20)
@@ -213,7 +256,7 @@ def voices(engine):
 @click.option('--diarize', is_flag=True, help='Enable speaker diarization.')
 @click.option('--emotion', is_flag=True, help='Enable emotion detection for TTS.')
 @click.option('--isolate-vocals', is_flag=True, help='Isolate vocals before transcription.')
-@click.option('--engine', type=click.Choice(['auto', 'chatterbox', 'qwen3', 'piper', 'fish', 'elevenlabs']), default='auto',
+@click.option('--engine', type=click.Choice(['auto', 'chatterbox', 'qwen3', 'piper', 'fish', 'elevenlabs', 'indextts', 'cosyvoice', 'orpheus']), default='auto',
               help='TTS engine (auto picks best for target language).')
 @click.option('--audio-prompt', default=None, type=click.Path(exists=True),
               help='Voice sample for cloning (WAV file).')
@@ -224,11 +267,26 @@ def voices(engine):
               help='ElevenLabs model variant (default: eleven_v3).')
 @click.option('--elevenlabs-voice', default=None,
               help='ElevenLabs voice name or UUID.')
+@click.option('--indextts-model', default=None, type=click.Choice(['base', 'design']),
+              help='IndexTTS-2 model variant (default: base).')
+@click.option('--indextts-emo-alpha', default=None, type=float,
+              help='IndexTTS-2 emotion alpha [0=identity, 1=emotion] (default: 0.5).')
+@click.option('--indextts-emotion-audio', default=None, type=click.Path(exists=True),
+              help='IndexTTS-2 emotion reference audio (separate from voice).')
+@click.option('--cosyvoice-model-dir', default=None, type=click.Path(exists=True),
+              help='CosyVoice2 model directory (or set COSYVOICE_MODEL_DIR).')
+@click.option('--cosyvoice-instruct', default=None,
+              help='CosyVoice2 instruction text (e.g. "Speak happily").')
+@click.option('--orpheus-voice', default=None,
+              type=click.Choice(['tara', 'leah', 'jess', 'leo', 'dan', 'mia', 'zac', 'zoe']),
+              help='Orpheus preset voice (default: tara).')
+@click.option('--orpheus-temperature', default=None, type=float,
+              help='Orpheus generation temperature (default: 0.7).')
 @click.option('--post-process/--no-post-process', 'post_process_tts', default=True,
               help='Post-process local TTS for naturalness (silence, dynamics, warmth).')
 @click.option('--post-process-intensity', default=0.7, type=float,
               help='Post-processing aggressiveness [0=off, 2=aggressive] (default: 0.7).')
-def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, isolate_vocals, engine, audio_prompt, max_speedup, elevenlabs_model, elevenlabs_voice, post_process_tts, post_process_intensity):
+def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, isolate_vocals, engine, audio_prompt, max_speedup, elevenlabs_model, elevenlabs_voice, indextts_model, indextts_emo_alpha, indextts_emotion_audio, cosyvoice_model_dir, cosyvoice_instruct, orpheus_voice, orpheus_temperature, post_process_tts, post_process_intensity):
     """Dub a video into another language."""
     from audiosmith.models import DubbingConfig
     from audiosmith.pipeline import DubbingPipeline
@@ -261,6 +319,20 @@ def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, i
                 kwargs['elevenlabs_voice_name'] = elevenlabs_voice
             else:
                 kwargs['elevenlabs_voice_id'] = elevenlabs_voice
+        if indextts_model:
+            kwargs['indextts_model'] = indextts_model
+        if indextts_emo_alpha is not None:
+            kwargs['indextts_emo_alpha'] = indextts_emo_alpha
+        if indextts_emotion_audio:
+            kwargs['indextts_emotion_prompt'] = Path(indextts_emotion_audio)
+        if cosyvoice_model_dir:
+            kwargs['cosyvoice_model_dir'] = cosyvoice_model_dir
+        if cosyvoice_instruct:
+            kwargs['cosyvoice_instruct'] = cosyvoice_instruct
+        if orpheus_voice:
+            kwargs['orpheus_voice'] = orpheus_voice
+        if orpheus_temperature is not None:
+            kwargs['orpheus_temperature'] = orpheus_temperature
         kwargs['post_process_tts'] = post_process_tts
         kwargs['post_process_intensity'] = post_process_intensity
 
@@ -592,7 +664,7 @@ def check():
 
 @cli.command()
 @click.argument('text')
-@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3', 'fish', 'elevenlabs']),
+@click.option('--engine', '-e', type=click.Choice(['piper', 'chatterbox', 'qwen3', 'fish', 'elevenlabs', 'indextts', 'cosyvoice', 'orpheus']),
               default='piper', help='TTS engine.')
 @click.option('--voice', default=None, help='Voice name (engine-specific).')
 @click.option('--output', '-o', required=True, type=click.Path(), help='Output audio file.')
@@ -702,6 +774,50 @@ def tts(text, engine, voice, output, language, model_type, instruct, ref_audio, 
             sample_rate = sr
             fish.cleanup()
 
+        elif engine == 'indextts':
+            from audiosmith.indextts_tts import IndexTTS2TTS
+            with console.status("[bold cyan]Loading IndexTTS-2...[/bold cyan]", spinner="dots"):
+                idx = IndexTTS2TTS()
+                if ref_audio:
+                    idx.create_voice_clone('clone', ref_audio=ref_audio)
+                audio, sr = idx.synthesize(
+                    text, voice='clone' if ref_audio else voice, language=language,
+                )
+            import soundfile as sf
+            sf.write(str(output_path), audio, sr)
+            sample_rate = sr
+            idx.cleanup()
+
+        elif engine == 'cosyvoice':
+            from audiosmith.cosyvoice_tts import CosyVoice2TTS
+            with console.status("[bold cyan]Loading CosyVoice2...[/bold cyan]", spinner="dots"):
+                cv = CosyVoice2TTS()
+                if ref_audio:
+                    cv.create_voice_clone('clone', ref_audio=ref_audio, ref_text=ref_text)
+                audio, sr = cv.synthesize(
+                    text, voice='clone' if ref_audio else None,
+                    language=language, instruct=instruct,
+                )
+            import soundfile as sf
+            sf.write(str(output_path), audio, sr)
+            sample_rate = sr
+            cv.cleanup()
+
+        elif engine == 'orpheus':
+            from audiosmith.orpheus_tts import OrpheusTTS
+            with console.status("[bold cyan]Loading Orpheus...[/bold cyan]", spinner="dots"):
+                orph = OrpheusTTS(voice=voice or 'tara')
+                if ref_audio:
+                    orph.create_voice_clone('clone', ref_audio=ref_audio)
+                audio, sr = orph.synthesize(
+                    text, voice='clone' if ref_audio else (voice or 'tara'),
+                    language=language,
+                )
+            import soundfile as sf
+            sf.write(str(output_path), audio, sr)
+            sample_rate = sr
+            orph.cleanup()
+
         elif engine == 'elevenlabs':
             from audiosmith.elevenlabs_tts import ElevenLabsTTS
             with console.status("[bold cyan]Calling ElevenLabs API...[/bold cyan]", spinner="dots"):
@@ -803,6 +919,97 @@ def extract_voices(audio, output_dir, num_samples, sample_duration, sample_rate,
         profiles = create_voice_profiles(voice_catalog)
         if profiles:
             console.print(f"[green]Voice profiles ready for TTS cloning ({len(profiles)} voices)[/green]")
+
+    except AudioSmithError as e:
+        console.print(f"[bold red]Error:[/bold red] {e.message}")
+        sys.exit(1)
+
+
+# ── Training data generation ─────────────────────────────────────────
+
+
+@cli.command('train-data-gen')
+@click.option('--output-dir', '-o', default='data/polish_training', type=click.Path(),
+              help='Output directory for training data.')
+@click.option('--stage', '-s', default='all', type=click.Choice(['1', '2', '3', '4', '5', '6', 'all']),
+              help='Run specific stage (1-6) or all.')
+@click.option('--resume', is_flag=True, help='Resume from last checkpoint.')
+@click.option('--sample-count', '-n', default=8000, type=int, help='Target sample count.')
+@click.option('--device', default='cuda', help='GPU device (cuda or cpu).')
+@click.option('--corpus', default=None, type=click.Path(), help='Pre-existing corpus file.')
+@click.option('--audiobook-dir', default=None, type=click.Path(exists=True),
+              help='Path to audiobook directory (e.g. Wiedzmin).')
+@click.option('--enable-elevenlabs', is_flag=True, help='Use ElevenLabs cloud TTS.')
+@click.option('--enable-fish', is_flag=True, help='Use Fish Speech cloud TTS.')
+@click.option('--chatterbox/--no-chatterbox', default=True, help='Use Chatterbox local TTS.')
+@click.option('--dry-run', is_flag=True, help='Validate config without generating.')
+def train_data_gen(output_dir, stage, resume, sample_count, device, corpus,
+                   audiobook_dir, enable_elevenlabs, enable_fish, chatterbox, dry_run):
+    """Generate Polish TTS training data for Qwen3 fine-tuning.
+
+    Multi-source pipeline: audiobook transcription, Chatterbox (local GPU),
+    ElevenLabs (cloud), Fish Speech (cloud). Produces paired text+audio
+    in Qwen3-TTS format.
+    """
+    from audiosmith.training_data_gen import TrainingDataConfig, TrainingDataGenerator
+
+    try:
+        config = TrainingDataConfig(
+            output_dir=Path(output_dir),
+            corpus_path=Path(corpus) if corpus else None,
+            device=device,
+            target_sample_count=sample_count,
+            enable_audiobook=audiobook_dir is not None,
+            audiobook_dir=Path(audiobook_dir) if audiobook_dir else None,
+            enable_chatterbox=chatterbox,
+            enable_elevenlabs=enable_elevenlabs,
+            enable_fish=enable_fish,
+        )
+
+        gen = TrainingDataGenerator(config)
+
+        if dry_run:
+            info = gen.dry_run()
+            t = Table(title="Training Data — Dry Run", show_header=True, header_style="bold cyan")
+            t.add_column("Parameter", width=20)
+            t.add_column("Value", width=40)
+            t.add_row("Output", str(info["output_dir"]))
+            t.add_row("Target Samples", str(info["target_samples"]))
+            t.add_row("Est. Disk (GB)", str(info["estimated_disk_gb"]))
+            for src in info["sources"]:
+                t.add_row(f"Source: {src['name']}", str({k: v for k, v in src.items() if k != 'name'}))
+            if "corpus_sentences" in info:
+                t.add_row("Corpus Lines", str(info["corpus_sentences"]))
+            console.print(Panel(t, border_style="blue"))
+            return
+
+        console.print(Panel(
+            f"[bold]Output:[/bold] {output_dir}\n"
+            f"[bold]Stage:[/bold] {stage}\n"
+            f"[bold]Samples:[/bold] {sample_count}\n"
+            f"[bold]Sources:[/bold] "
+            f"{'CB ' if chatterbox else ''}"
+            f"{'EL ' if enable_elevenlabs else ''}"
+            f"{'Fish ' if enable_fish else ''}"
+            f"{'Audiobook' if audiobook_dir else ''}",
+            title="[cyan]Training Data Generation[/cyan]", border_style="cyan",
+        ))
+
+        with console.status("[bold cyan]Running pipeline...[/bold cyan]", spinner="dots"):
+            summary = gen.run(stage=stage, resume=resume)
+
+        # Display results
+        t = Table(title="Pipeline Results", show_header=True, header_style="bold green")
+        t.add_column("Stage", width=15)
+        t.add_column("Result", width=40)
+        t.add_column("Time", width=12, justify="right")
+
+        for stage_key, data in summary.items():
+            elapsed = data.pop("elapsed_s", 0)
+            t.add_row(stage_key, str(data), f"{elapsed:.1f}s")
+
+        console.print(t)
+        console.print("[green]Training data generation complete.[/green]")
 
     except AudioSmithError as e:
         console.print(f"[bold red]Error:[/bold red] {e.message}")
