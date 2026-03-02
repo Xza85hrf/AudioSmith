@@ -83,8 +83,8 @@ class TrainingDataConfig:
     min_duration_s: float = 1.0
     max_duration_s: float = 20.0
     min_snr_db: float = 15.0
-    max_silence_pct: float = 30.0
-    max_peak: float = 0.95
+    max_silence_pct: float = 50.0  # Natural speech has pauses; PP adds silence at punctuation
+    max_peak: float = 1.0  # PP limiter clips to 1.0; only reject >1.0 (corrupted)
     min_rms: float = 0.01
 
 
@@ -448,7 +448,6 @@ class TrainingDataGenerator:
 
         raw_dir = self.config.output_dir / "raw"
         el = ElevenLabsTTS()
-        el.ensure_client()
 
         count = 0
         manifest_entries: List[Dict] = []
@@ -456,8 +455,7 @@ class TrainingDataGenerator:
         for i, text in enumerate(sentences):
             try:
                 audio, sr = el.synthesize(
-                    text, language="pl",
-                    model=self.config.elevenlabs_model,
+                    text,
                     voice_name=self.config.elevenlabs_voice_name,
                 )
 
@@ -494,7 +492,6 @@ class TrainingDataGenerator:
 
         raw_dir = self.config.output_dir / "raw"
         fish = FishSpeechTTS()
-        fish.ensure_client()
 
         count = 0
         manifest_entries: List[Dict] = []
@@ -503,7 +500,6 @@ class TrainingDataGenerator:
             try:
                 audio, sr = fish.synthesize(
                     text, language="pl",
-                    model=self.config.fish_model,
                 )
 
                 clip_name = f"fish_{count:06d}.wav"
@@ -598,8 +594,9 @@ class TrainingDataGenerator:
                     audio = audio.mean(axis=1)
 
                 text = entry.get("text", "")
-                emotion = entry.get("emotion", "neutral")
-                audio_out = processor.process(audio, sr, text=text, emotion=emotion)
+                emotion_name = entry.get("emotion", "neutral")
+                emotion_dict = {"primary": emotion_name, "intensity": 0.5}
+                audio_out = processor.process(audio, sr, text=text, emotion=emotion_dict)
 
                 sf.write(str(dst), audio_out, sr)
                 processed += 1
@@ -689,10 +686,14 @@ class TrainingDataGenerator:
         if rms < self.config.min_rms:
             return "near_silent"
 
-        # Peak/clipping check
+        # Sustained clipping check — reject if >5% of samples are at max
+        # (PP limiter hitting 1.0 occasionally is normal; sustained clipping is not)
         peak = float(np.max(np.abs(audio)))
         if peak > self.config.max_peak:
             return "clipping"
+        clipped_pct = float(np.mean(np.abs(audio) >= 0.999)) * 100
+        if clipped_pct > 5.0:
+            return "sustained_clipping"
 
         # Silence percentage (frames below -40dB threshold)
         silence_threshold = 10 ** (-40 / 20)

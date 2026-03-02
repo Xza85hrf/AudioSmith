@@ -84,11 +84,9 @@ class PolishCorpusManager:
             logger.info("Using cached Wikipedia dump: %s", dump_path)
             return dump_path
 
-        # CirrusSearch dump — JSON lines with pre-extracted text
-        dump_url = (
-            "https://dumps.wikimedia.org/other/cirrussearch/current/"
-            "plwiki-current-cirrussearch-content.json.gz"
-        )
+        # CirrusSearch dump — dated directories with JSON lines
+        # Format: alternating index + content lines
+        dump_url = self._find_latest_dump_url()
         gz_path = self._cache_dir / "plwiki-cirrussearch.json.gz"
 
         logger.info("Downloading Polish Wikipedia dump from %s", dump_url)
@@ -101,7 +99,7 @@ class PolishCorpusManager:
                 original_error=e,
             )
 
-        logger.info("Extracting text from dump...")
+        logger.info("Extracting text from dump (~5.6 GB compressed)...")
         line_count = 0
         with gzip.open(str(gz_path), "rt", encoding="utf-8") as gz, \
              open(str(dump_path), "w", encoding="utf-8") as out:
@@ -111,6 +109,8 @@ class PolishCorpusManager:
                     continue
                 try:
                     doc = json.loads(line)
+                    # CirrusSearch alternates index lines and content lines.
+                    # Content lines have a "text" field; index lines have "index".
                     text = doc.get("text", "")
                     if text and len(text) > 50:
                         out.write(text + "\n\n")
@@ -120,6 +120,36 @@ class PolishCorpusManager:
 
         logger.info("Extracted %d articles to %s", line_count, dump_path)
         return dump_path
+
+    @staticmethod
+    def _find_latest_dump_url() -> str:
+        """Find the latest CirrusSearch dump URL for Polish Wikipedia."""
+        import urllib.request
+        import re as _re
+
+        index_url = "https://dumps.wikimedia.org/other/cirrussearch/"
+        try:
+            with urllib.request.urlopen(index_url) as resp:
+                html = resp.read().decode("utf-8")
+            dates = _re.findall(r'href="(\d{8})/"', html)
+            if not dates:
+                raise TrainingError(
+                    "No CirrusSearch dump dates found",
+                    error_code="TRAIN_WIKI_DL",
+                )
+            latest = sorted(dates)[-1]
+            return (
+                f"https://dumps.wikimedia.org/other/cirrussearch/{latest}/"
+                f"plwiki-{latest}-cirrussearch-content.json.gz"
+            )
+        except TrainingError:
+            raise
+        except Exception as e:
+            raise TrainingError(
+                f"Failed to discover dump URL: {e}",
+                error_code="TRAIN_WIKI_DL",
+                original_error=e,
+            )
 
     def extract_sentences(
         self,
