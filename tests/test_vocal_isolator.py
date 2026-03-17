@@ -35,6 +35,10 @@ class TestGracefulFallback:
             v.load_model()
 
 
+@pytest.mark.skipif(
+    not __import__("importlib").util.find_spec("torch"),
+    reason="torch not available in CI",
+)
 class TestIsolate:
     @pytest.fixture
     def mock_torch(self):

@@ -51,6 +51,10 @@ class TestSchedule:
 
 
 class TestRender:
+    @pytest.mark.skipif(
+        not __import__("importlib").util.find_spec("librosa"),
+        reason="librosa not available in CI",
+    )
     def test_empty_schedule(self, mixer):
         buf = mixer.render([], 5.0)
         assert buf.shape == (5 * 48000, 2)
