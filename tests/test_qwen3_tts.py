@@ -1,16 +1,15 @@
 """Tests for audiosmith.qwen3_tts module."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
 from audiosmith.exceptions import TTSError
-from audiosmith.qwen3_tts import (_LANGUAGE_MAP, MODEL_VARIANTS,
-                                  PREMIUM_VOICES, SUPPORTED_LANGUAGES,
-                                  Qwen3TTS, VoiceProfile, _normalize_language,
-                                  detect_language, estimate_synthesis_duration)
+from audiosmith.qwen3_tts import (MODEL_VARIANTS, PREMIUM_VOICES,
+                                  SUPPORTED_LANGUAGES, Qwen3TTS, VoiceProfile,
+                                  _normalize_language, detect_language,
+                                  estimate_synthesis_duration)
 
 
 class TestConstants:

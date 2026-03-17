@@ -1,9 +1,7 @@
 """Tests for audiosmith.polish_corpus and audiosmith.training_data_gen modules."""
 
-import json
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest

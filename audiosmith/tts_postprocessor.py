@@ -407,7 +407,7 @@ def _measure_spectral_envelope(
 
 def _compute_spectral_correction(
     measured: Dict[str, float],
-    target_profile: "EmotionProfile",
+    target_profile: "EmotionProfile",  # noqa: F821
     spectral_intensity: float,
 ) -> np.ndarray:
     """Compute per-band gain correction to match target spectral profile.

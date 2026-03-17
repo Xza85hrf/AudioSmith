@@ -138,10 +138,10 @@ def encode_video(
     cmd.extend([
         '-map', '0:v:0', '-map', '0:a:0', '-map', '1:a:0',
         '-c:a', 'aac', '-b:a', '192k',
-        f'-metadata:s:a:0', f'language={source_language}',
-        f'-metadata:s:a:0', f'title=Original {source_language.upper()}',
-        f'-metadata:s:a:1', f'language={target_language}',
-        f'-metadata:s:a:1', f'title=Dubbed {target_language.upper()}',
+        '-metadata:s:a:0', f'language={source_language}',
+        '-metadata:s:a:0', f'title=Original {source_language.upper()}',
+        '-metadata:s:a:1', f'language={target_language}',
+        '-metadata:s:a:1', f'title=Dubbed {target_language.upper()}',
         '-y', str(output_path),
     ])
 
@@ -188,8 +188,8 @@ def _encode_without_subtitles(
         '-c:v', 'copy',
         '-map', '0:v:0', '-map', '0:a:0', '-map', '1:a:0',
         '-c:a', 'aac', '-b:a', '192k',
-        f'-metadata:s:a:0', f'language={source_language}',
-        f'-metadata:s:a:1', f'language={target_language}',
+        '-metadata:s:a:0', f'language={source_language}',
+        '-metadata:s:a:1', f'language={target_language}',
         '-y', str(output_path),
     ])
     try:

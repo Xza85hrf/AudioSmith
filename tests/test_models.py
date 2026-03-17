@@ -1,12 +1,9 @@
 """Tests for audiosmith.models module."""
 
-import json
 from pathlib import Path
 
-import pytest
-
-from audiosmith.models import (DubbingConfig, DubbingResult, DubbingSegment,
-                               DubbingStep, PipelineState, ScheduledSegment)
+from audiosmith.models import (DubbingConfig, DubbingSegment, DubbingStep,
+                               PipelineState, ScheduledSegment)
 
 
 class TestDubbingConfig:

@@ -163,8 +163,8 @@ def apply_question_intonation(
 
     # FFT-domain frequency shift (5-15 Hz upward, scaled by intensity)
     shift_hz = 5.0 + 10.0 * intensity
-    fft = np.fft.rfft(rise_region)
-    freqs = np.fft.rfftfreq(len(rise_region), d=1.0 / sr)
+    np.fft.rfft(rise_region)
+    np.fft.rfftfreq(len(rise_region), d=1.0 / sr)
 
     # Phase shift for frequency displacement
     phase_shift = 2 * np.pi * shift_hz * np.arange(len(rise_region)) / sr
