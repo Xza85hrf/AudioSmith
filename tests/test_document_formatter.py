@@ -1,6 +1,5 @@
 """Tests for audiosmith.document_formatter module."""
 
-from pathlib import Path
 
 import pytest
 

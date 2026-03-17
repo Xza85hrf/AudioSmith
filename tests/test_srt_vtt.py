@@ -1,8 +1,6 @@
 """Tests for SRT and VTT subtitle utilities."""
 
-from pathlib import Path
 
-import pytest
 
 from audiosmith.srt import (SRTEntry, parse_srt, seconds_to_timestamp,
                             seconds_to_vtt_timestamp, timestamp_to_seconds,

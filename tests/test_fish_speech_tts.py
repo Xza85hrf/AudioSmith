@@ -1,7 +1,6 @@
 """Tests for audiosmith.fish_speech_tts module."""
 
 import io
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np

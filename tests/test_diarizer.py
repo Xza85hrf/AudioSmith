@@ -1,6 +1,5 @@
 """Tests for audiosmith.diarizer module (no GPU required)."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
