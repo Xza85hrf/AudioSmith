@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+pytest.importorskip("aiml_training", reason="aiml_training not available in CI")
+
 from audiosmith.exceptions import TrainingError
 from audiosmith.f5_finetune import F5FineTuneConfig, F5FineTuneTrainer
 
