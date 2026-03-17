@@ -98,4 +98,6 @@ class BatchProcessingError(ProcessingError):
 try:
     from aiml_training.exceptions import TrainingError  # noqa: F401
 except ImportError:
-    pass
+
+    class TrainingError(AudioSmithError):
+        """Training operation failed."""
