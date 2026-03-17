@@ -7,10 +7,7 @@ import numpy as np
 import pytest
 
 from audiosmith.exceptions import TTSError
-from audiosmith.indextts_tts import (
-    INDEXTTS_LANGS,
-    IndexTTS2TTS,
-)
+from audiosmith.indextts_tts import INDEXTTS_LANGS, IndexTTS2TTS
 
 
 class TestConstants:

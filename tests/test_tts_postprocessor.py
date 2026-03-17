@@ -4,22 +4,18 @@ import numpy as np
 import pytest
 
 from audiosmith.exceptions import TTSError
-from audiosmith.tts_postprocessor import (
-    PostProcessConfig,
-    TTSPostProcessor,
-    _add_breath_noise,
-    _add_micro_dynamics,
-    _apply_spectral_correction,
-    _boost_warmth,
-    _compute_spectral_correction,
-    _expand_dynamic_range,
-    _inject_silence,
-    _measure_spectral_envelope,
-    _pink_noise,
-    _reshape_dynamic_range,
-    _synthesize_presence,
-    _trim_excess_silence,
-)
+from audiosmith.tts_postprocessor import (PostProcessConfig, TTSPostProcessor,
+                                          _add_breath_noise,
+                                          _add_micro_dynamics,
+                                          _apply_spectral_correction,
+                                          _boost_warmth,
+                                          _compute_spectral_correction,
+                                          _expand_dynamic_range,
+                                          _inject_silence,
+                                          _measure_spectral_envelope,
+                                          _pink_noise, _reshape_dynamic_range,
+                                          _synthesize_presence,
+                                          _trim_excess_silence)
 
 SR = 24000  # Standard sample rate for tests
 

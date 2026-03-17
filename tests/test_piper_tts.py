@@ -1,10 +1,12 @@
 """Tests for audiosmith.piper_tts module."""
 
-import pytest
-from unittest.mock import MagicMock
 from pathlib import Path
-from audiosmith.piper_tts import PiperTTS, POLISH_VOICES, ENGLISH_VOICES
+from unittest.mock import MagicMock
+
+import pytest
+
 from audiosmith.exceptions import TTSError
+from audiosmith.piper_tts import ENGLISH_VOICES, POLISH_VOICES, PiperTTS
 
 
 class TestPiperTTS:

@@ -7,12 +7,8 @@ import numpy as np
 import pytest
 
 from audiosmith.exceptions import TTSError
-from audiosmith.orpheus_tts import (
-    ORPHEUS_LANGS,
-    ORPHEUS_VOICES,
-    ORPHEUS_EMOTION_TAGS,
-    OrpheusTTS,
-)
+from audiosmith.orpheus_tts import (ORPHEUS_EMOTION_TAGS, ORPHEUS_LANGS,
+                                    ORPHEUS_VOICES, OrpheusTTS)
 
 
 class TestConstants:

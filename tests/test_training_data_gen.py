@@ -9,18 +9,11 @@ import numpy as np
 import pytest
 
 from audiosmith.exceptions import TrainingError
-from audiosmith.polish_corpus import (
-    PolishCorpusManager,
-    POLISH_DIACRITICS,
-    ALL_POLISH_CHARS,
-    _ABBREVIATIONS,
-)
-from audiosmith.training_data_gen import (
-    TrainingDataConfig,
-    TrainingDataGenerator,
-    Checkpoint,
-    _EMOTION_TTS_MAP,
-)
+from audiosmith.polish_corpus import (_ABBREVIATIONS, ALL_POLISH_CHARS,
+                                      POLISH_DIACRITICS, PolishCorpusManager)
+from audiosmith.training_data_gen import (_EMOTION_TTS_MAP, Checkpoint,
+                                          TrainingDataConfig,
+                                          TrainingDataGenerator)
 
 SR = 24000
 

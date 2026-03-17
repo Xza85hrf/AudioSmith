@@ -3,8 +3,8 @@
 import logging
 from typing import List, Optional
 
-from audiosmith.exceptions import TranslationError
 from audiosmith.error_codes import ErrorCode
+from audiosmith.exceptions import TranslationError
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def translate_gemma(
 ) -> str:
     """Translate using TranslateGemma (GPU, higher quality). Requires [gemma] extra."""
     import torch
-    from transformers import AutoTokenizer, AutoModelForCausalLM
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
     model_ids = {
         'fast': 'google/translategemma-4b-it',

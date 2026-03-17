@@ -173,6 +173,8 @@ class ElevenLabsTTS:
         text: str,
         voice_id: Optional[str] = None,
         voice_name: Optional[str] = None,
+        style: Optional[float] = None,
+        speed: Optional[float] = None,
     ) -> Tuple[np.ndarray, int]:
         """Synthesize text to audio.
 
@@ -180,6 +182,8 @@ class ElevenLabsTTS:
             text: Text to synthesize.
             voice_id: Override voice UUID for this call.
             voice_name: Override voice by human name for this call.
+            style: Expressiveness level 0.0-1.0 (higher = more dramatic).
+            speed: Speech rate 0.5-2.0 (1.0 = normal).
 
         Returns:
             Tuple of (audio_array float32, sample_rate).
@@ -192,12 +196,20 @@ class ElevenLabsTTS:
         # Resolve per-call voice override
         vid = self._resolve_voice(voice_id, voice_name)
 
+        # Build voice_settings dict
+        voice_settings: Dict[str, float] = {'stability': 0.5, 'similarity_boost': 0.75}
+        if style is not None:
+            voice_settings['style'] = max(0.0, min(1.0, style))
+        if speed is not None:
+            voice_settings['speed'] = max(0.5, min(2.0, speed))
+
         try:
             audio_iter = self._client.text_to_speech.convert(
                 text=text,
                 voice_id=vid,
                 model_id=self.model_id,
                 output_format=self.output_format,
+                voice_settings=voice_settings,
             )
             # convert() returns an iterator of bytes chunks
             audio_bytes = b"".join(audio_iter)

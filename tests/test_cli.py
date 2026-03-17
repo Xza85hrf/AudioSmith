@@ -1,8 +1,10 @@
 """Tests for audiosmith.cli module."""
 
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 from click.testing import CliRunner
+
 from audiosmith.cli import cli
 
 

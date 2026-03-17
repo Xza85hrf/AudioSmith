@@ -7,12 +7,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from audiosmith.elevenlabs_tts import (
-    ELEVENLABS_LANGS,
-    ELEVENLABS_MODELS,
-    VOICE_MAP,
-    ElevenLabsTTS,
-)
+from audiosmith.elevenlabs_tts import (ELEVENLABS_LANGS, ELEVENLABS_MODELS,
+                                       VOICE_MAP, ElevenLabsTTS)
 from audiosmith.exceptions import TTSError
 
 

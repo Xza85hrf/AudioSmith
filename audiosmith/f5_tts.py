@@ -46,12 +46,9 @@ F5_LANGS: Set[str] = set(F5_LANGUAGE_MAP.keys())
 def _get_f5_infer():
     """Lazy import f5_tts inference utilities."""
     try:
-        from f5_tts.infer.utils_infer import (
-            infer_process,
-            load_model,
-            load_vocoder,
-            preprocess_ref_audio_text,
-        )
+        from f5_tts.infer.utils_infer import (infer_process, load_model,
+                                              load_vocoder,
+                                              preprocess_ref_audio_text)
         return load_model, load_vocoder, infer_process, preprocess_ref_audio_text
     except ImportError:
         raise TTSError(
@@ -163,11 +160,8 @@ class F5TTS:
         # Resolve checkpoint and vocab paths
         ckpt_path, vocab_file = self._resolve_paths()
 
-        # Get vocab size for model config
-        vocab_size = self._get_vocab_size(vocab_file)
-
-        # Build model config
-        model_cfg = {**F5_MODEL_CONFIG, "text_num_embeds": vocab_size, "mel_dim": 100}
+        # Build model config (load_model adds text_num_embeds and mel_dim)
+        model_cfg = dict(F5_MODEL_CONFIG)
 
         logger.info(
             "Loading F5-TTS model '%s' on %s (ckpt=%s)",

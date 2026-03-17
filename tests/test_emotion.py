@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
-from audiosmith.emotion import Emotion, EmotionResult, EmotionEngine, detect_emotion
+from audiosmith.emotion import (Emotion, EmotionEngine, EmotionResult,
+                                detect_emotion)
 
 
 class TestEmotion:

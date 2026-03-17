@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from audiosmith.exceptions import TTSError
-from audiosmith.f5_tts import F5TTS, F5_SAMPLE_RATE
+from audiosmith.f5_tts import F5_SAMPLE_RATE, F5TTS
 
 
 def _make_wav_bytes(duration: float = 1.0, sr: int = 24000) -> bytes:

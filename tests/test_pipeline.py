@@ -1,13 +1,13 @@
 """Tests for audiosmith.pipeline module."""
 
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from audiosmith.pipeline import DubbingPipeline, CHECKPOINT_FILE
-from audiosmith.models import DubbingConfig, DubbingSegment, PipelineState
 from audiosmith.exceptions import DubbingError
+from audiosmith.models import DubbingConfig, DubbingSegment, PipelineState
+from audiosmith.pipeline import CHECKPOINT_FILE, DubbingPipeline
 
 
 @pytest.fixture

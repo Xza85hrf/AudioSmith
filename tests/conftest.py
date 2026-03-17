@@ -1,7 +1,8 @@
 """Shared test fixtures for AudioSmith."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 def pytest_collection_modifyitems(items):

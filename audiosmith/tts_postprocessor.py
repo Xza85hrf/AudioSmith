@@ -231,10 +231,8 @@ class TTSPostProcessor:
         if lang == "pl" and text:
             try:
                 from audiosmith.polish_prosody import (
-                    apply_penultimate_stress,
-                    apply_question_intonation,
-                    normalize_syllable_timing,
-                )
+                    apply_penultimate_stress, apply_question_intonation,
+                    normalize_syllable_timing)
                 wav = apply_penultimate_stress(wav, sample_rate, text, intensity)
                 wav = apply_question_intonation(wav, sample_rate, text, intensity)
                 wav = normalize_syllable_timing(wav, sample_rate, text, intensity)

@@ -1,11 +1,11 @@
 """Content validation — validates transcription segments before formatting/processing."""
 
-import re
 import logging
+import re
 from typing import List
 
-from audiosmith.models import DubbingSegment
 from audiosmith.exceptions import ValidationError
+from audiosmith.models import DubbingSegment
 
 logger = logging.getLogger(__name__)
 

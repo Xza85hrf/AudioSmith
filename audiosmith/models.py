@@ -1,7 +1,7 @@
 """Data models for the AudioSmith 6-step dubbing pipeline."""
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -67,6 +67,9 @@ class DubbingConfig:
     post_process_tts: bool = True
     post_process_intensity: float = 0.7
     resume: bool = False
+    external_srt_path: Optional[Path] = None  # Skip translation, use official SRT
+    use_srt_timing: bool = False  # Use SRT timing directly (recommended for high-quality SRT)
+    allow_extended_timing: bool = False  # Allow segments to extend past original end
 
 
 @dataclass
@@ -122,7 +125,9 @@ class PipelineState:
     segments: List[Dict[str, Any]] = field(default_factory=list)
     duration: float = 0.0
     audio_path: Optional[str] = None
+    hq_audio_path: Optional[str] = None  # High-quality audio for Demucs (48kHz stereo)
     dubbed_audio_path: Optional[str] = None
+    background_audio_path: Optional[str] = None
     subtitle_path: Optional[str] = None
 
     def save(self, path: Path) -> None:

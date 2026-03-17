@@ -6,11 +6,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from audiosmith.cosyvoice_tts import COSYVOICE_LANGS, CosyVoice2TTS
 from audiosmith.exceptions import TTSError
-from audiosmith.cosyvoice_tts import (
-    COSYVOICE_LANGS,
-    CosyVoice2TTS,
-)
 
 
 class TestConstants:

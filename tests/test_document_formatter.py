@@ -1,10 +1,12 @@
 """Tests for audiosmith.document_formatter module."""
 
-import pytest
 from pathlib import Path
+
+import pytest
+
 from audiosmith.document_formatter import DocumentFormatter, FormatterOptions
-from audiosmith.models import DubbingSegment
 from audiosmith.exceptions import DocumentFormattingError
+from audiosmith.models import DubbingSegment
 
 
 def _seg(text, idx=0, start=0.0, end=5.0, speaker=None, translated=""):

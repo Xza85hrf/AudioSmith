@@ -1,9 +1,10 @@
 """Tests for audiosmith.content_validator module."""
 
 import pytest
+
 from audiosmith.content_validator import ContentValidator
-from audiosmith.models import DubbingSegment
 from audiosmith.exceptions import ValidationError
+from audiosmith.models import DubbingSegment
 
 
 class TestContentValidator:

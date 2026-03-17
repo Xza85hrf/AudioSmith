@@ -1,11 +1,13 @@
 """Tests for audiosmith.batch_processor module."""
 
-import pytest
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from audiosmith.batch_processor import BatchProcessor, BatchResult
-from audiosmith.models import DubbingConfig, DubbingResult
 from audiosmith.exceptions import BatchProcessingError
+from audiosmith.models import DubbingConfig, DubbingResult
 
 
 class TestBatchResult:

@@ -7,8 +7,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from audiosmith.exceptions import DiarizationError
 from audiosmith.error_codes import ErrorCode
+from audiosmith.exceptions import DiarizationError
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ class Diarizer:
         try:
             self._pipeline = Pipeline.from_pretrained(
                 'pyannote/speaker-diarization-3.1',
-                use_auth_token=self.hf_token,
+                token=self.hf_token,
             )
 
             import torch

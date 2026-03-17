@@ -1,8 +1,10 @@
 """Tests for audiosmith.memory_manager module."""
 
 import gc
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from audiosmith.memory_manager import MemoryManager
 
 

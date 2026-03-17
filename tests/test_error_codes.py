@@ -1,6 +1,6 @@
 """Tests for audiosmith.error_codes module."""
 
-from audiosmith.error_codes import ErrorCode, ErrorCategory, ErrorContext
+from audiosmith.error_codes import ErrorCategory, ErrorCode, ErrorContext
 
 
 class TestErrorCode:

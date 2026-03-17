@@ -1,7 +1,7 @@
 """Professional SRT subtitle formatter — splits Whisper segments into broadcast-quality subtitles."""
 
-import re
 import logging
+import re
 from typing import Any, Dict, List
 
 from audiosmith.srt import SRTEntry, seconds_to_timestamp
