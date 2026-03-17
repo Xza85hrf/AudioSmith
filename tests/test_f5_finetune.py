@@ -10,7 +10,6 @@ import json
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -254,7 +253,7 @@ class TestF5FineTuneTrainerPrepareData:
 
             trainer = F5FineTuneTrainer(self.config)
 
-            result = trainer.prepare_data(output_dir=output_dir)
+            trainer.prepare_data(output_dir=output_dir)
 
             # Check metadata.csv was created
             metadata_path = output_dir / "metadata.csv"
@@ -477,7 +476,7 @@ class TestF5FineTuneTrainerBuildModel:
         mock_cfm_class.return_value = MagicMock()
 
         vocab_size = 256
-        model = trainer._build_model(mock_cfm_class, mock_dit_class, vocab_size)
+        trainer._build_model(mock_cfm_class, mock_dit_class, vocab_size)
 
         # CFM should be created with transformer kwarg
         assert mock_cfm_class.called
@@ -522,7 +521,7 @@ class TestF5FineTuneTrainerTrain:
              patch.object(trainer, "_import_f5_training", return_value=(MagicMock(), MagicMock(), mock_get_tok, MagicMock())), \
              patch.object(trainer, "_download_vocab", return_value=Path("/fake/vocab")), \
              patch.object(trainer, "_download_checkpoint", return_value=Path("/fake/ckpt")), \
-             patch("aiml_training.training.f5_finetune.shutil") as mock_shutil:
+             patch("aiml_training.training.f5_finetune.shutil"):
             with pytest.raises(TrainingError) as exc_info:
                 trainer.train()
 

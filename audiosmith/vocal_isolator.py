@@ -46,8 +46,8 @@ class VocalIsolator:
         logger.info("Loaded Demucs model '%s' on %s", self.model_name, self.device)
 
     def _isolate_chunked(
-        self, wav: "torch.Tensor", chunk_samples: int,
-    ) -> tuple["torch.Tensor", "torch.Tensor"]:
+        self, wav: "torch.Tensor", chunk_samples: int,  # noqa: F821
+    ) -> tuple["torch.Tensor", "torch.Tensor"]:  # noqa: F821
         """Process audio in chunks to avoid GPU OOM on long files.
 
         Args:

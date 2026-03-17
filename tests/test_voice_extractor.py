@@ -1,10 +1,7 @@
 """Tests for audiosmith.voice_extractor module."""
 
-import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from audiosmith.voice_extractor import (VoiceCatalog, VoiceExtractor,
                                         VoiceSample, create_voice_profiles)

@@ -1,7 +1,7 @@
 """Translation module — Argos primary, TranslateGemma optional fallback."""
 
 import logging
-from typing import List, Optional
+from typing import List
 
 from audiosmith.error_codes import ErrorCode
 from audiosmith.exceptions import TranslationError

@@ -17,7 +17,7 @@ import io
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Optional, Set, Tuple, Union
 
 import numpy as np
 

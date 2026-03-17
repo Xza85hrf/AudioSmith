@@ -17,7 +17,7 @@ to shape local TTS output toward professional quality.
     Band 8: 8+ kHz      (ultra-high, sparkle)
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 # Octave band edges in Hz (9 bands)
