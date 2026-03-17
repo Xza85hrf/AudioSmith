@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install click numpy soundfile yt-dlp pytest pytest-cov
+          pip install click rich numpy soundfile yt-dlp pytest pytest-cov
           pip install --no-deps -e .
 
       - name: Run tests
