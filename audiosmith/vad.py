@@ -66,7 +66,6 @@ class VADProcessor:
                 waveform = waveform.mean(dim=0, keepdim=True)
             audio_tensor = waveform.squeeze(0)
         except ImportError:
-            import numpy as np
             import soundfile as sf
             data, sr = sf.read(str(audio_path), dtype="float32")
             if len(data.shape) > 1:

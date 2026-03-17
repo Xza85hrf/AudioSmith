@@ -1,6 +1,5 @@
 """Shared test fixtures for AudioSmith."""
 
-from pathlib import Path
 
 import pytest
 

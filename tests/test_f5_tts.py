@@ -1,7 +1,6 @@
 """Tests for audiosmith.f5_tts module."""
 
 import io
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -84,7 +83,7 @@ class TestF5TTS_Init:
         )
         mock_get_dit.return_value = MagicMock()
 
-        tts = F5TTS()
+        F5TTS()
         # Should not load model yet - lazy loading
         mock_get_f5_infer.return_value[0].assert_not_called()
 

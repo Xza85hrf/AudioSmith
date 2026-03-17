@@ -3,7 +3,6 @@
 import numpy as np
 import pytest
 
-from audiosmith.exceptions import TTSError
 from audiosmith.tts_postprocessor import (PostProcessConfig, TTSPostProcessor,
                                           _add_breath_noise,
                                           _add_micro_dynamics,

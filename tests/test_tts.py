@@ -1,8 +1,7 @@
 """Tests for audiosmith.tts module."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import numpy as np
 import pytest
 
 from audiosmith.tts import LANGUAGE_MAP, ChatterboxTTS

@@ -1,7 +1,6 @@
 """Tests for audiosmith.polish_prosody module."""
 
 import numpy as np
-import pytest
 
 from audiosmith.polish_prosody import (POLISH_VOWELS,
                                        _estimate_word_boundaries,
