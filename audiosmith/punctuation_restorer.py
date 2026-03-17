@@ -3,7 +3,6 @@
 import re
 from typing import List
 
-
 QUESTION_STARTERS = {
     'what', 'when', 'where', 'who', 'why', 'how',
     'is', 'are', 'was', 'were',

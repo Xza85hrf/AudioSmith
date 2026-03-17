@@ -1,10 +1,10 @@
 """Emotion detection from text for TTS enhancement — rule-based with optional ML fallback."""
 
-import re
 import logging
-from typing import Optional, Dict, List, Tuple
+import re
 from dataclasses import dataclass
 from enum import Enum
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

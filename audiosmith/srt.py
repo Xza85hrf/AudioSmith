@@ -1,4 +1,4 @@
-"""AudioSmith SRT subtitle parsing and writing utilities."""
+"""AudioSmith SRT and WebVTT subtitle parsing and writing utilities."""
 
 import re
 from dataclasses import dataclass
@@ -72,3 +72,21 @@ def seconds_to_timestamp(s: float) -> str:
     m = int((s % 3600) // 60)
     sec = s % 60
     return f"{h:02d}:{m:02d}:{sec:06.3f}".replace('.', ',')
+
+
+def seconds_to_vtt_timestamp(s: float) -> str:
+    """Convert seconds to WebVTT timestamp format (HH:MM:SS.mmm)."""
+    h = int(s // 3600)
+    m = int((s % 3600) // 60)
+    sec = s % 60
+    return f"{h:02d}:{m:02d}:{sec:06.3f}"
+
+
+def write_vtt(entries: List[SRTEntry], path: Path) -> None:
+    """Write SRT entries as WebVTT to a file."""
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('WEBVTT\n\n')
+        for entry in entries:
+            start = entry.start_time.replace(',', '.')
+            end = entry.end_time.replace(',', '.')
+            f.write(f'{start} --> {end}\n{entry.text}\n\n')

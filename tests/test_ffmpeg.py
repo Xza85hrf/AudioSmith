@@ -1,13 +1,13 @@
 """Tests for audiosmith.ffmpeg module."""
 
 import subprocess
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from audiosmith.ffmpeg import probe_duration, extract_audio, encode_video
 from audiosmith.exceptions import DubbingError
+from audiosmith.ffmpeg import encode_video, extract_audio, probe_duration
 
 
 class TestProbeDuration:

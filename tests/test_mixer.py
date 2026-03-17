@@ -1,9 +1,10 @@
 """Tests for audiosmith.mixer module."""
 
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 from audiosmith.mixer import AudioMixer
 from audiosmith.models import DubbingConfig, DubbingSegment, ScheduledSegment

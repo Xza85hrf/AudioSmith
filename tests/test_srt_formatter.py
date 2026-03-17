@@ -4,8 +4,8 @@ import re
 
 import pytest
 
-from audiosmith.srt_formatter import SRTFormatter, MIN_GAP
 from audiosmith.srt import SRTEntry
+from audiosmith.srt_formatter import MIN_GAP, SRTFormatter
 
 
 class TestFormatSegments:

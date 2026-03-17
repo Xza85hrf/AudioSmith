@@ -64,7 +64,6 @@ class PiperTTS:
         self._load_model()
 
         import numpy as np
-
         from piper.config import SynthesisConfig
         syn_config = SynthesisConfig(
             length_scale=length_scale if length_scale is not None else 1.0,

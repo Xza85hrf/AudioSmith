@@ -1,8 +1,11 @@
 """Tests for audiosmith.retry module."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from audiosmith.retry import retry, with_fallback, is_transient_error, RetryError
+
+from audiosmith.retry import (RetryError, is_transient_error, retry,
+                              with_fallback)
 
 
 class TestRetryDecorator:

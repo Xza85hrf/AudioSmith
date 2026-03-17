@@ -4,10 +4,10 @@ import logging
 import re
 from typing import List, Union
 
+from audiosmith.content_validator import ContentValidator
 from audiosmith.models import DubbingSegment
 from audiosmith.punctuation_restorer import PunctuationRestorer
 from audiosmith.tech_corrections import TechTermCorrections
-from audiosmith.content_validator import ContentValidator
 
 logger = logging.getLogger(__name__)
 

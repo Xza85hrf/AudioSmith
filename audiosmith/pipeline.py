@@ -5,11 +5,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from audiosmith.models import (
-    DubbingConfig, DubbingSegment, DubbingStep, DubbingResult, PipelineState,
-)
-from audiosmith.exceptions import DubbingError
 from audiosmith.error_codes import ErrorCode
+from audiosmith.exceptions import DubbingError
+from audiosmith.models import (DubbingConfig, DubbingResult, DubbingSegment,
+                               DubbingStep, PipelineState)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +26,21 @@ _EMOTION_TTS_MAP: Dict[str, Dict[str, float]] = {
     'tender': {'exaggeration': 0.3, 'cfg_weight': 0.4},
     'excited': {'exaggeration': 0.8, 'cfg_weight': 0.6},
     'determined': {'exaggeration': 0.7, 'cfg_weight': 0.6},
+}
+
+# Emotion → ElevenLabs style parameter (0.0 = neutral, 1.0 = expressive)
+_EMOTION_STYLE_MAP: Dict[str, float] = {
+    'neutral': 0.0,
+    'happy': 0.3,
+    'sad': 0.2,
+    'angry': 0.5,
+    'fearful': 0.4,
+    'surprised': 0.4,
+    'whisper': 0.1,
+    'excited': 0.5,
+    'tender': 0.2,
+    'sarcastic': 0.3,
+    'determined': 0.3,
 }
 
 
@@ -117,13 +131,20 @@ class DubbingPipeline:
     # ------------------------------------------------------------------
     # Step 1: Extract audio
     # ------------------------------------------------------------------
-    def _extract_audio(self, video_path: Path) -> Path:
-        from audiosmith.ffmpeg import extract_audio
+    def _extract_audio(self, video_path: Path, extract_hq: bool = False) -> Path:
+        from audiosmith.ffmpeg import extract_audio, extract_audio_hq
 
         out_dir = Path(self.config.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         audio_path = out_dir / 'audio_16k_mono.wav'
         extract_audio(video_path, audio_path)
+
+        # Extract high-quality audio for Demucs vocal isolation
+        if extract_hq:
+            hq_audio_path = out_dir / 'audio_hq.wav'
+            extract_audio_hq(video_path, hq_audio_path)
+            self.state.hq_audio_path = str(hq_audio_path)
+
         return audio_path
 
     # ------------------------------------------------------------------
@@ -149,6 +170,100 @@ class DubbingPipeline:
                 end_time=seg['end'],
                 original_text=seg['text'],
             ))
+        return segments
+
+    def _import_external_srt(
+        self, srt_path: Path, segments: List[DubbingSegment],
+    ) -> List[DubbingSegment]:
+        """Match official SRT entries to transcription segments by time overlap.
+
+        This replaces the ML-translated text with official human-verified subtitles,
+        preserving the timing from the original transcription.
+        """
+        from audiosmith.srt import parse_srt_file, timestamp_to_seconds
+
+        srt_entries = parse_srt_file(srt_path)
+        srt_segments = [
+            {'start': timestamp_to_seconds(e.start_time),
+             'end': timestamp_to_seconds(e.end_time),
+             'text': e.text}
+            for e in srt_entries
+        ]
+
+        matched_count = 0
+        for seg in segments:
+            # Find the SRT segment with maximum time overlap
+            best_match = None
+            best_overlap = 0.0
+            for srt_seg in srt_segments:
+                # Calculate overlap duration
+                overlap_start = max(seg.start_time, srt_seg['start'])
+                overlap_end = min(seg.end_time, srt_seg['end'])
+                overlap = max(0.0, overlap_end - overlap_start)
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    best_match = srt_seg
+
+            if best_match and best_overlap > 0.0:
+                seg.translated_text = best_match['text']
+                seg.metadata['translation_source'] = 'external_srt'
+                matched_count += 1
+            else:
+                # Fallback: use original text as translation
+                seg.translated_text = seg.original_text
+                seg.metadata['translation_source'] = 'fallback_original'
+
+        logger.info(
+            "Imported external SRT: %d/%d segments matched",
+            matched_count, len(segments),
+        )
+        return segments
+
+    def _create_segments_from_srt(self, srt_path: Path) -> List[DubbingSegment]:
+        """Create segments directly from SRT entries using SRT timing.
+
+        This is the preferred mode when you have a high-quality official SRT.
+        It creates segments that match the SRT timing exactly, avoiding
+        the alignment issues that occur when Whisper segments are much longer
+        than SRT entries.
+        """
+        from audiosmith.srt import parse_srt_file, timestamp_to_seconds
+
+        srt_entries = parse_srt_file(srt_path)
+        segments = []
+
+        for i, entry in enumerate(srt_entries):
+            text = entry.text.strip()
+
+            # Skip non-speech entries (sound effects, music)
+            if text.startswith('[') and text.endswith(']'):
+                continue
+
+            # Skip empty entries
+            if not text:
+                continue
+
+            start = timestamp_to_seconds(entry.start_time)
+            end = timestamp_to_seconds(entry.end_time)
+
+            # Skip very short entries (< 0.3s) - likely artifacts
+            if end - start < 0.3:
+                continue
+
+            segments.append(DubbingSegment(
+                index=len(segments),
+                start_time=start,
+                end_time=end,
+                original_text='',  # No English source when using SRT timing
+                translated_text=text,
+                is_speech=True,
+                metadata={'translation_source': 'external_srt_timing'},
+            ))
+
+        logger.info(
+            "Created %d segments from SRT (skipped %d non-speech/empty)",
+            len(segments), len(srt_entries) - len(segments),
+        )
         return segments
 
     # ------------------------------------------------------------------
@@ -365,12 +480,26 @@ class DubbingPipeline:
             if not text.strip():
                 continue
 
+            # Skip segments whose TTS audio already exists on disk (resume-safe)
+            wav_path = tts_dir / f'seg_{seg.index:04d}.wav'
+            if wav_path.exists() and wav_path.stat().st_size > 0:
+                seg.tts_audio_path = wav_path
+                info = sf.info(str(wav_path))
+                seg.tts_duration_ms = int(info.duration * 1000)
+                logger.debug("Skipping TTS for segment %d (cached: %s)", seg.index, wav_path)
+                continue
+
             # Collapse 3+ consecutive identical words to 2 (prevents TTS looping)
             text = self._dedup_repeated_words(text)
 
             try:
                 if tts_engine_name == 'elevenlabs':
-                    audio, sr = engine.synthesize(text)
+                    # Get emotion-based style for ElevenLabs
+                    style = None
+                    emo_data = seg.metadata.get('emotion')
+                    if emo_data:
+                        style = _EMOTION_STYLE_MAP.get(emo_data.get('primary', 'neutral'), 0.0)
+                    audio, sr = engine.synthesize(text, style=style)
                     wav = audio
                     sample_rate = sr
                 elif tts_engine_name == 'qwen3':
@@ -464,7 +593,8 @@ class DubbingPipeline:
             # Post-process TTS for naturalness (skip cloud/emotion-native engines)
             if self.config.post_process_tts and tts_engine_name not in ('elevenlabs', 'indextts', 'cosyvoice', 'orpheus'):
                 try:
-                    from audiosmith.tts_postprocessor import TTSPostProcessor, PostProcessConfig
+                    from audiosmith.tts_postprocessor import (
+                        PostProcessConfig, TTSPostProcessor)
                     preset = _ENGINE_PP_PRESETS.get(tts_engine_name, {}).copy()
                     lang_overrides = _LANGUAGE_PP_OVERRIDES.get(self.config.target_language, {})
                     preset.update(lang_overrides)
@@ -643,7 +773,13 @@ class DubbingPipeline:
     def _mix_audio(self, segments: List[DubbingSegment], total_duration: float):
         from audiosmith.mixer import AudioMixer
 
-        mixer = AudioMixer(self.config)
+        bg_path = None
+        if self.state.background_audio_path:
+            bg_path = Path(self.state.background_audio_path)
+            if not bg_path.exists():
+                logger.warning("Background audio not found: %s", bg_path)
+                bg_path = None
+        mixer = AudioMixer(self.config, background_path=bg_path)
         # Neural TTS (Chatterbox): prefer truncation over time_stretch distortion
         engine = getattr(self.config, 'tts_engine', 'piper')
         if engine in ('chatterbox', 'auto') and self.config.target_language not in self._QWEN3_LANGS:
@@ -837,7 +973,7 @@ class DubbingPipeline:
                 logger.info("Skipping %s (cached)", step)
             else:
                 ts = time.time()
-                audio_path = self._extract_audio(video_path)
+                audio_path = self._extract_audio(video_path, extract_hq=self.config.isolate_vocals)
                 result.step_times[step] = time.time() - ts
                 self.state.audio_path = str(audio_path)
                 self.state.mark_step_done(step)
@@ -857,10 +993,16 @@ class DubbingPipeline:
                     from audiosmith.vocal_isolator import VocalIsolator
                     ts = time.time()
                     vi = VocalIsolator(device=self.config.whisper_device)
-                    paths = vi.isolate(audio_path, output_dir=Path(self.config.output_dir))
+                    # Use HQ audio (48kHz stereo) for Demucs, not 16kHz mono
+                    hq_path = Path(self.state.hq_audio_path) if self.state.hq_audio_path else audio_path
+                    paths = vi.isolate(
+                        hq_path, output_dir=Path(self.config.output_dir),
+                        mixing_sample_rate=self.config.dubbed_sample_rate,
+                    )
                     vi.unload()
                     audio_path = paths['vocals_path']
                     self.state.audio_path = str(audio_path)
+                    self.state.background_audio_path = str(paths['background_hq_path'])
                     result.step_times[step] = time.time() - ts
                     self.state.mark_step_done(step)
                     self._save_checkpoint()
@@ -885,7 +1027,8 @@ class DubbingPipeline:
                     segments = self._dicts_to_segments(self.state.segments)
                     logger.info("Skipping %s (cached)", step)
                 else:
-                    from audiosmith.transcription_post_processor import TranscriptionPostProcessor
+                    from audiosmith.transcription_post_processor import \
+                        TranscriptionPostProcessor
                     ts = time.time()
                     pp = TranscriptionPostProcessor()
                     segments = pp.process(segments)
@@ -952,14 +1095,35 @@ class DubbingPipeline:
                     self.state.mark_step_done(step)
                     self._save_checkpoint()
 
-            # Step 3: Translate
+            # Step 3: Translate (or import from external SRT)
             step = DubbingStep.TRANSLATE.value
             if self.state.is_step_done(step):
                 segments = self._dicts_to_segments(self.state.segments)
                 logger.info("Skipping %s (cached)", step)
             else:
                 ts = time.time()
-                segments = self._translate(segments)
+                if self.config.external_srt_path:
+                    # Use official SRT instead of ML translation
+                    if getattr(self.config, 'use_srt_timing', False):
+                        # Use SRT timing directly - creates clean segments from SRT
+                        logger.info(
+                            "Creating segments from SRT timing: %s",
+                            self.config.external_srt_path,
+                        )
+                        segments = self._create_segments_from_srt(
+                            self.config.external_srt_path,
+                        )
+                    else:
+                        # Legacy mode: match SRT to Whisper segments (may cause duplicates)
+                        logger.info(
+                            "Importing external SRT: %s",
+                            self.config.external_srt_path,
+                        )
+                        segments = self._import_external_srt(
+                            self.config.external_srt_path, segments,
+                        )
+                else:
+                    segments = self._translate(segments)
                 result.step_times[step] = time.time() - ts
                 self.state.segments = self._segments_to_dicts(segments)
                 self.state.mark_step_done(step)

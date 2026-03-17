@@ -6,8 +6,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from audiosmith.exceptions import TranscriptionError
 from audiosmith.error_codes import ErrorCode
+from audiosmith.exceptions import TranscriptionError
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class Transcriber:
             return
 
         try:
-            from faster_whisper import WhisperModel, BatchedInferencePipeline
+            from faster_whisper import BatchedInferencePipeline, WhisperModel
         except ImportError as e:
             raise TranscriptionError(
                 "faster-whisper not installed. Run: pip install faster-whisper",

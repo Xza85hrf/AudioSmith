@@ -1,9 +1,11 @@
 """Tests for audiosmith.input_handler module."""
 
-import pytest
 from pathlib import Path
-from audiosmith.input_handler import InputHandler
+
+import pytest
+
 from audiosmith.exceptions import InputError, ValidationError
+from audiosmith.input_handler import InputHandler
 
 
 class TestInputHandler:

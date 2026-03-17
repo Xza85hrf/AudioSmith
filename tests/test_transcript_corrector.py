@@ -1,10 +1,12 @@
 """Tests for audiosmith.transcript_corrector module."""
 
 import json
-import pytest
 from pathlib import Path
-from audiosmith.transcript_corrector import TranscriptCorrector
+
+import pytest
+
 from audiosmith.models import DubbingSegment
+from audiosmith.transcript_corrector import TranscriptCorrector
 
 
 def _seg(text, index=0, start=0.0, end=1.0):

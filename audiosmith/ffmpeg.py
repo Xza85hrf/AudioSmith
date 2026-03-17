@@ -6,8 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from audiosmith.exceptions import DubbingError
 from audiosmith.error_codes import ErrorCode
+from audiosmith.exceptions import DubbingError
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,37 @@ def extract_audio(
     return output_path
 
 
+def extract_audio_hq(
+    video_path: Path,
+    output_path: Path,
+    sample_rate: int = 48000,
+    channels: int = 2,
+    max_duration: Optional[float] = None,
+) -> Path:
+    """Extract high-quality stereo audio from video for vocal isolation."""
+    cmd = ['ffmpeg', '-i', str(video_path)]
+    if max_duration is not None:
+        cmd.extend(['-t', str(max_duration)])
+    cmd.extend([
+        '-vn', '-acodec', 'pcm_s16le',
+        '-ar', str(sample_rate), '-ac', str(channels),
+        '-y', str(output_path),
+    ])
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run(cmd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        stderr_msg = e.stderr.decode().strip() if e.stderr else "Unknown error"
+        raise DubbingError(
+            f"Failed to extract HQ audio from {video_path}: {stderr_msg}",
+            error_code=str(ErrorCode.DUBBING_EXTRACTION_ERROR.value),
+            original_error=e,
+        )
+    size_mb = output_path.stat().st_size / (1024 * 1024)
+    logger.info("Extracted HQ audio: %s (%.1f MB)", output_path, size_mb)
+    return output_path
+
+
 def encode_video(
     video_path: Path,
     dubbed_audio_path: Path,
@@ -76,6 +107,11 @@ def encode_video(
     """Encode final video with original + dubbed audio tracks and optional burned subtitles."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Convert to absolute paths to avoid issues with working directory
+    video_path = video_path.resolve()
+    dubbed_audio_path = dubbed_audio_path.resolve()
+    output_path = output_path.resolve()
+
     cmd = ['ffmpeg', '-i', str(video_path), '-i', str(dubbed_audio_path)]
     if max_duration is not None:
         cmd.extend(['-t', str(max_duration)])
@@ -83,14 +119,15 @@ def encode_video(
     # Subtitle burning
     subs_copy = None
     if subtitle_path is not None and subtitle_path.exists():
+        subtitle_path = subtitle_path.resolve()
         subs_copy = output_path.parent / 'dubbed_subs.srt'
-        if subtitle_path.resolve() != subs_copy.resolve():
+        if subtitle_path != subs_copy:
             shutil.copy2(subtitle_path, subs_copy)
-        else:
-            subs_copy = subtitle_path
-        escaped = subs_copy.name.replace("'", r"\'").replace(":", r"\:")
+        # Use absolute path with proper escaping for subtitle filter
+        # On Linux, colons in paths must be escaped for the subtitle filter
+        subs_escaped = str(subs_copy).replace('\\', '\\\\').replace("'", r"\'").replace(':', r'\:')
         vf = (
-            f"subtitles={escaped}"
+            f"subtitles='{subs_escaped}'"
             ":force_style='FontSize=22,PrimaryColour=&H00FFFFFF,"
             "OutlineColour=&H00000000,Outline=2'"
         )
@@ -109,7 +146,7 @@ def encode_video(
     ])
 
     try:
-        subprocess.run(cmd, check=True, capture_output=True, cwd=str(output_path.parent))
+        subprocess.run(cmd, check=True, capture_output=True)
     except subprocess.CalledProcessError as e:
         if subs_copy is not None:
             logger.warning("Subtitle burning failed, retrying without subtitles")
@@ -139,6 +176,11 @@ def _encode_without_subtitles(
     target_language: str,
 ) -> Path:
     """Fallback: encode without subtitle burning."""
+    # Use absolute paths for consistency
+    video_path = video_path.resolve()
+    dubbed_audio_path = dubbed_audio_path.resolve()
+    output_path = output_path.resolve()
+
     cmd = ['ffmpeg', '-i', str(video_path), '-i', str(dubbed_audio_path)]
     if max_duration is not None:
         cmd.extend(['-t', str(max_duration)])

@@ -3,14 +3,12 @@
 import numpy as np
 import pytest
 
-from audiosmith.polish_prosody import (
-    POLISH_VOWELS,
-    _find_vowel_clusters,
-    _estimate_word_boundaries,
-    apply_penultimate_stress,
-    apply_question_intonation,
-    normalize_syllable_timing,
-)
+from audiosmith.polish_prosody import (POLISH_VOWELS,
+                                       _estimate_word_boundaries,
+                                       _find_vowel_clusters,
+                                       apply_penultimate_stress,
+                                       apply_question_intonation,
+                                       normalize_syllable_timing)
 
 SR = 24000
 

@@ -1,6 +1,7 @@
 """Tests for audiosmith.language_detect module."""
 
 import pytest
+
 from audiosmith.language_detect import LanguageDetector
 
 

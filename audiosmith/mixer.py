@@ -2,11 +2,11 @@
 
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 
-from audiosmith.models import DubbingSegment, ScheduledSegment, DubbingConfig
+from audiosmith.models import DubbingConfig, DubbingSegment, ScheduledSegment
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +14,13 @@ logger = logging.getLogger(__name__)
 class AudioMixer:
     """Schedules TTS segments sequentially with drift correction, then renders to a numpy buffer."""
 
-    def __init__(self, config: DubbingConfig):
+    def __init__(self, config: DubbingConfig, background_path: Optional[Path] = None):
         self.min_gap_ms = config.min_gap_ms
         self.max_speedup = config.max_speedup
         self.silence_reset_gap = config.silence_reset_gap
         self.sample_rate = config.dubbed_sample_rate
+        self.background_path = background_path
+        self.allow_extended_timing = getattr(config, 'allow_extended_timing', False)
 
     def schedule(self, segments: List[DubbingSegment]) -> List[ScheduledSegment]:
         """Build a schedule that keeps segments within their original time windows.
@@ -26,6 +28,10 @@ class AudioMixer:
         Segments are sped up (up to max_speedup) to fit.  If even max speedup
         is not enough the audio is truncated with a fade-out so that subsequent
         segments stay aligned with the source video.
+
+        When allow_extended_timing is True, segments can extend up to 500ms
+        past their original end time, reducing the need for speedup when
+        translation is naturally longer.
         """
         scheduled = []
         prev_end_ms = 0
@@ -43,7 +49,9 @@ class AudioMixer:
             else:
                 earliest_start = max(orig_start_ms, prev_end_ms + self.min_gap_ms)
 
-            window_ms = max(orig_end_ms - earliest_start, 1)
+            # Allow extended timing: segment can go 500ms past original end
+            max_end_ms = orig_end_ms + (500 if self.allow_extended_timing else 0)
+            window_ms = max(max_end_ms - earliest_start, 1)
 
             if seg.tts_duration_ms <= window_ms:
                 # Fits naturally — no speedup needed
@@ -72,18 +80,54 @@ class AudioMixer:
 
         return scheduled
 
+    def _load_background(self, total_samples: int) -> np.ndarray:
+        """Load background audio and fit to total_samples length."""
+        import librosa
+        import soundfile as sf
+
+        bg_audio, bg_sr = sf.read(str(self.background_path))
+        bg_audio = bg_audio.astype(np.float32)
+
+        if bg_audio.ndim == 1:
+            bg_audio = np.column_stack([bg_audio, bg_audio])
+
+        if bg_sr != self.sample_rate:
+            bg_audio = librosa.resample(
+                bg_audio.T, orig_sr=bg_sr, target_sr=self.sample_rate,
+            ).T
+
+        if len(bg_audio) >= total_samples:
+            return bg_audio[:total_samples]
+
+        buffer = np.zeros((total_samples, 2), dtype=np.float32)
+        buffer[:len(bg_audio)] = bg_audio
+        return buffer
+
     def render(self, scheduled: List[ScheduledSegment], total_duration_s: float) -> np.ndarray:
         """Render scheduled segments into a float32 stereo buffer, peak-normalized to 0.95.
 
         Uses librosa for pitch-preserving time-stretch and proper resampling.
         Segments that exceed their window are truncated with a 30ms fade-out.
+        When a background track is set, TTS segments are layered on top with
+        -12 dB ducking of the background during speech windows.
         """
-        import soundfile as sf
         import librosa
+        import soundfile as sf
 
         total_samples = int(total_duration_s * self.sample_rate)
-        buffer = np.zeros((total_samples, 2), dtype=np.float32)
+
+        if self.background_path is not None:
+            try:
+                buffer = self._load_background(total_samples)
+                logger.info("Loaded background audio from %s", self.background_path.name)
+            except Exception as exc:
+                logger.warning("Failed to load background audio: %s — using silence", exc)
+                buffer = np.zeros((total_samples, 2), dtype=np.float32)
+        else:
+            buffer = np.zeros((total_samples, 2), dtype=np.float32)
+
         rendered = 0
+        fade_samples = int(0.05 * self.sample_rate)  # 50ms crossfade for ducking
 
         for item in scheduled:
             try:
@@ -125,8 +169,21 @@ class AudioMixer:
                 # Place in buffer
                 s = int(item.place_at_ms / 1000 * self.sample_rate)
                 e = min(s + len(stereo), total_samples)
+
                 if e > s:
-                    buffer[s:e] = stereo[:e - s]
+                    # Duck the background during TTS segment (-12 dB = 0.25)
+                    if self.background_path is not None:
+                        region_len = e - s
+                        envelope = np.full(region_len, 0.25, dtype=np.float32)
+                        fl = min(fade_samples, region_len // 4)
+                        if fl > 0:
+                            # Ramp down 1.0→0.25 at start, ramp up 0.25→1.0 at end
+                            envelope[:fl] = np.linspace(1.0, 0.25, fl, dtype=np.float32)
+                            envelope[-fl:] = np.linspace(0.25, 1.0, fl, dtype=np.float32)
+                        buffer[s:e] *= envelope[:, np.newaxis]
+
+                    buffer[s:e] += stereo[:e - s]
+
                 rendered += 1
             except Exception as exc:
                 logger.warning("Render failed for segment %d: %s", item.segment.index, exc)

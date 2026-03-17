@@ -1,17 +1,22 @@
 """Rich CLI for AudioSmith — dub, transcribe, translate, batch, export, normalize, check, tts, extract-voices, info, voices."""
 
-import sys
 import shutil
+import sys
 from pathlib import Path
 
 import click
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
 from rich.prompt import Prompt
+from rich.table import Table
 
-from audiosmith.log import setup_logging, get_logger
 from audiosmith.exceptions import AudioSmithError
+from audiosmith.log import get_logger, setup_logging
+
+try:
+    from aiml_training.exceptions import AimlTrainingError
+except ImportError:
+    AimlTrainingError = AudioSmithError  # fallback when training package absent
 
 logger = get_logger(__name__)
 console = Console()
@@ -440,7 +445,7 @@ def transcribe(audio, output, language, model, diarize, isolate_vocals):
               help='Translation backend.')
 def translate(srt_file, target_lang, source_lang, backend):
     """Translate an SRT subtitle file."""
-    from audiosmith.srt import parse_srt_file, SRTEntry, write_srt
+    from audiosmith.srt import SRTEntry, parse_srt_file, write_srt
     from audiosmith.translate import translate as do_translate
 
     srt_path = Path(srt_file)
@@ -571,9 +576,10 @@ def batch(files, target_lang, source_lang, output_dir, continue_on_error):
 @click.option('--speakers', is_flag=True, help='Include speaker labels.')
 def export(srt_file, fmt, output, title, timestamps, speakers):
     """Export an SRT file to TXT, PDF, or DOCX."""
-    from audiosmith.srt import parse_srt_file
-    from audiosmith.document_formatter import DocumentFormatter, FormatterOptions
+    from audiosmith.document_formatter import (DocumentFormatter,
+                                               FormatterOptions)
     from audiosmith.models import DubbingSegment
+    from audiosmith.srt import parse_srt_file
 
     srt_path = Path(srt_file)
     try:
@@ -856,7 +862,8 @@ def tts(text, engine, voice, output, language, model_type, instruct, ref_audio, 
         # Post-process TTS for naturalness (skip ElevenLabs, custom config for Fish)
         if post_process and engine != 'elevenlabs':
             try:
-                from audiosmith.tts_postprocessor import TTSPostProcessor, PostProcessConfig
+                from audiosmith.tts_postprocessor import (PostProcessConfig,
+                                                          TTSPostProcessor)
                 if engine == 'fish':
                     pp_config = PostProcessConfig(
                         enable_silence=False, enable_dynamics=True,
@@ -906,7 +913,8 @@ def tts(text, engine, voice, output, language, model_type, instruct, ref_audio, 
 @click.option('--catalog', '-c', default=None, type=click.Path(), help='Save voice catalog JSON.')
 def extract_voices(audio, output_dir, num_samples, sample_duration, sample_rate, diarize, num_speakers, catalog):
     """Extract voice samples from audio for TTS voice cloning."""
-    from audiosmith.voice_extractor import VoiceExtractor, create_voice_profiles
+    from audiosmith.voice_extractor import (VoiceExtractor,
+                                            create_voice_profiles)
 
     audio_path = Path(audio)
     out_dir = Path(output_dir) if output_dir else audio_path.parent / f'{audio_path.stem}_voices'
@@ -977,7 +985,8 @@ def train_data_gen(output_dir, stage, resume, sample_count, device, corpus,
     ElevenLabs (cloud), Fish Speech (cloud). Produces paired text+audio
     in Qwen3-TTS format.
     """
-    from audiosmith.training_data_gen import TrainingDataConfig, TrainingDataGenerator
+    from audiosmith.training_data_gen import (TrainingDataConfig,
+                                              TrainingDataGenerator)
 
     try:
         config = TrainingDataConfig(
@@ -1037,7 +1046,7 @@ def train_data_gen(output_dir, stage, resume, sample_count, device, corpus,
         console.print(t)
         console.print("[green]Training data generation complete.[/green]")
 
-    except AudioSmithError as e:
+    except (AudioSmithError, AimlTrainingError) as e:
         console.print(f"[bold red]Error:[/bold red] {e.message}")
         sys.exit(1)
 
@@ -1118,6 +1127,6 @@ def train_f5(data_dir, output_dir, epochs, batch_size, lr, resume, prepare_only,
         console.print(f"[bold green]Training complete![/bold green] Checkpoint: {ckpt_path}")
         trainer.cleanup()
 
-    except AudioSmithError as e:
+    except (AudioSmithError, AimlTrainingError) as e:
         console.print(f"[bold red]Error:[/bold red] {e.message}")
         sys.exit(1)

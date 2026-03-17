@@ -1,7 +1,9 @@
 """Tests for audiosmith.progress module."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from audiosmith.progress import ProgressTracker
 
 

@@ -4,8 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from audiosmith.translate import translate, translate_batch
 from audiosmith.exceptions import TranslationError
+from audiosmith.translate import translate, translate_batch
 
 
 class TestTranslate:

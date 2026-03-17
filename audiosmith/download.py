@@ -8,8 +8,8 @@ from typing import Any, Dict, List
 
 import yt_dlp
 
-from audiosmith.srt import SRTEntry, seconds_to_timestamp, write_srt
 from audiosmith.ffmpeg import extract_audio
+from audiosmith.srt import SRTEntry, seconds_to_timestamp, write_srt
 
 logger = logging.getLogger(__name__)
 

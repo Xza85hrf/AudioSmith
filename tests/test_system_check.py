@@ -1,6 +1,7 @@
 """Tests for audiosmith.system_check module."""
 
 import pytest
+
 from audiosmith.system_check import SystemChecker
 
 

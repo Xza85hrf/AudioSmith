@@ -32,10 +32,8 @@ class ProgressTracker:
 
         if use_rich:
             try:
-                from rich.progress import (
-                    Progress, SpinnerColumn, TextColumn,
-                    BarColumn, TaskProgressColumn,
-                )
+                from rich.progress import (BarColumn, Progress, SpinnerColumn,
+                                           TaskProgressColumn, TextColumn)
                 self._progress = Progress(
                     SpinnerColumn(),
                     TextColumn("[bold blue]{task.description}"),

@@ -1,10 +1,9 @@
 """Tests for audiosmith.exceptions module."""
 
-from audiosmith.exceptions import (
-    AudioSmithError, ProcessingError, TranscriptionError,
-    TranslationError, TTSError, DubbingError,
-    DiarizationError, VocalIsolationError,
-)
+from audiosmith.exceptions import (AudioSmithError, DiarizationError,
+                                   DubbingError, ProcessingError,
+                                   TranscriptionError, TranslationError,
+                                   TTSError, VocalIsolationError)
 
 
 class TestExceptionHierarchy:

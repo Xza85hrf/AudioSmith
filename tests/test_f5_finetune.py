@@ -10,7 +10,7 @@ import json
 import logging
 import tempfile
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -18,7 +18,6 @@ import pytest
 
 from audiosmith.exceptions import TrainingError
 from audiosmith.f5_finetune import F5FineTuneConfig, F5FineTuneTrainer
-
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ class TestF5FineTuneConfig:
         assert config.base_ckpt_file == "Polish/model_500000.pt"
         assert config.device == "cuda"
         assert config.epochs == 10
-        assert config.batch_size_per_gpu == 3200
+        assert config.batch_size_per_gpu == 6400
         assert config.learning_rate == 7.5e-5
 
     def test_custom_values_accepted(self):
@@ -521,7 +520,7 @@ class TestF5FineTuneTrainerTrain:
              patch.object(trainer, "_import_f5_training", return_value=(MagicMock(), MagicMock(), mock_get_tok, MagicMock())), \
              patch.object(trainer, "_download_vocab", return_value=Path("/fake/vocab")), \
              patch.object(trainer, "_download_checkpoint", return_value=Path("/fake/ckpt")), \
-             patch("audiosmith.f5_finetune.shutil") as mock_shutil:
+             patch("aiml_training.training.f5_finetune.shutil") as mock_shutil:
             with pytest.raises(TrainingError) as exc_info:
                 trainer.train()
 

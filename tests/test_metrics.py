@@ -1,7 +1,9 @@
 """Tests for audiosmith.metrics module."""
 
 import time
+
 import pytest
+
 from audiosmith.metrics import MetricsCollector
 
 

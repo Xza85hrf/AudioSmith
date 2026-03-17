@@ -1,12 +1,12 @@
 """Tests for audiosmith.srt module."""
 
-import pytest
 from pathlib import Path
 
-from audiosmith.srt import (
-    SRTEntry, parse_srt, parse_srt_file, write_srt,
-    timestamp_to_seconds, seconds_to_timestamp,
-)
+import pytest
+
+from audiosmith.srt import (SRTEntry, parse_srt, parse_srt_file,
+                            seconds_to_timestamp, timestamp_to_seconds,
+                            write_srt)
 
 
 class TestTimestamps:

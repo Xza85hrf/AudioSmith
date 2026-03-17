@@ -1,8 +1,9 @@
 """Tests for audiosmith.transcription_post_processor module."""
 
 import pytest
-from audiosmith.transcription_post_processor import TranscriptionPostProcessor
+
 from audiosmith.models import DubbingSegment
+from audiosmith.transcription_post_processor import TranscriptionPostProcessor
 
 
 class TestTranscriptionPostProcessor:

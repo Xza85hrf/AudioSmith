@@ -94,6 +94,8 @@ class BatchProcessingError(ProcessingError):
         super().__init__(message, error_code or "BATCH_ERR", details, original_error)
 
 
-class TrainingError(ProcessingError):
-    def __init__(self, message, error_code=None, details=None, original_error=None):
-        super().__init__(message, error_code or "TRAIN_ERR", details, original_error)
+# TrainingError now lives in aiml_training — re-export for backward compatibility
+try:
+    from aiml_training.exceptions import TrainingError  # noqa: F401
+except ImportError:
+    pass

@@ -79,7 +79,8 @@ class TestIsolate:
 
         assert result['vocals_path'] == tmp_path / 'test_vocals.wav'
         assert result['background_path'] == tmp_path / 'test_background.wav'
-        assert mock_save.call_count == 2
+        assert result['background_hq_path'] == tmp_path / 'test_background_hq.wav'
+        assert mock_save.call_count == 3
 
     def test_mono_to_stereo(self, tmp_path, mock_torch):
         import torch

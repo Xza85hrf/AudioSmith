@@ -8,11 +8,8 @@ import numpy as np
 import pytest
 
 from audiosmith.exceptions import TTSError
-from audiosmith.fish_speech_tts import (
-    FISH_LANGUAGE_MAP,
-    FISH_LANGS,
-    FishSpeechTTS,
-)
+from audiosmith.fish_speech_tts import (FISH_LANGS, FISH_LANGUAGE_MAP,
+                                        FishSpeechTTS)
 
 
 def _make_wav_bytes(duration: float = 1.0, sr: int = 44100) -> bytes:

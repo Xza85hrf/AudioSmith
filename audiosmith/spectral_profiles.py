@@ -20,7 +20,6 @@ to shape local TTS output toward professional quality.
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-
 # Octave band edges in Hz (9 bands)
 BAND_EDGES: List[float] = [0, 150, 350, 700, 1400, 2800, 4000, 6000, 8000]
 

@@ -1,6 +1,7 @@
 """Tests for audiosmith.punctuation_restorer module."""
 
 import pytest
+
 from audiosmith.punctuation_restorer import PunctuationRestorer
 
 

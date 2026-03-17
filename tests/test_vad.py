@@ -1,7 +1,9 @@
 """Tests for audiosmith.vad module."""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
+
 from audiosmith.vad import SpeechSegment, VADProcessor
 
 

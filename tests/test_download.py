@@ -1,9 +1,9 @@
 """Tests for audiosmith.download module."""
 
-from audiosmith.download import (
-    is_url, slugify, segments_to_txt, segments_to_vtt, segments_to_json,
-)
 import json
+
+from audiosmith.download import (is_url, segments_to_json, segments_to_txt,
+                                 segments_to_vtt, slugify)
 
 
 class TestIsUrl:
