@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+pytest.importorskip("aiml_training", reason="aiml_training not available in CI")
+
 from audiosmith.exceptions import TrainingError
 from audiosmith.polish_corpus import (_ABBREVIATIONS, ALL_POLISH_CHARS,
                                       POLISH_DIACRITICS, PolishCorpusManager)
