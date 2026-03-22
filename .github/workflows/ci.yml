@@ -62,3 +62,21 @@ jobs:
       - name: Type check
         run: |
           mypy audiosmith/ tests/ --ignore-missing-imports || true
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run bandit security scan
+        env:
+          REPORT_DIR: /tmp/bandit-reports
+        run: |
+          pip install bandit
+          mkdir -p "$REPORT_DIR"
+          bandit -r audiosmith/ -ll

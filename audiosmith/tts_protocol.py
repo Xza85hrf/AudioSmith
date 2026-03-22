@@ -12,11 +12,10 @@ The factory function get_engine() creates engines by name with lazy imports.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Protocol, Tuple, runtime_checkable
+from typing import Any, Protocol, Tuple, runtime_checkable
 
 import numpy as np
 
-from audiosmith.exceptions import TTSError
 
 
 @runtime_checkable

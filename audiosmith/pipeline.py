@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from audiosmith.error_codes import ErrorCode
-from audiosmith.emotion_config import (EMOTION_STYLE_MAP, EMOTION_TTS_MAP)
+from audiosmith.emotion_config import EMOTION_STYLE_MAP, EMOTION_TTS_MAP
 from audiosmith.exceptions import DubbingError
 from audiosmith.models import (DubbingConfig, DubbingResult, DubbingSegment,
                                DubbingStep, PipelineState)
@@ -357,7 +357,6 @@ class DubbingPipeline:
 
     def _generate_tts(self, segments: List[DubbingSegment]) -> List[DubbingSegment]:
         import soundfile as sf
-        from audiosmith.tts_protocol import get_engine
 
         tts_dir = Path(self.config.output_dir) / 'tts_segments'
         tts_dir.mkdir(parents=True, exist_ok=True)
@@ -646,7 +645,7 @@ class DubbingPipeline:
         if emo_data:
             if engine_name == 'elevenlabs':
                 # ElevenLabs uses style (0.0 = neutral, 1.0 = expressive)
-                kwargs['style'] = _EMOTION_STYLE_MAP.get(
+                kwargs['style'] = EMOTION_STYLE_MAP.get(
                     emo_data.get('primary', 'neutral'), 0.0
                 )
             elif engine_name == 'fish':

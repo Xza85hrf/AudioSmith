@@ -1,6 +1,5 @@
 """Tests for audiosmith.pipeline_config module."""
 
-import pytest
 
 from audiosmith.pipeline_config import (
     ENGINE_PP_PRESETS,

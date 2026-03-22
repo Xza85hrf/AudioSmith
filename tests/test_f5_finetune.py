@@ -18,7 +18,7 @@ import pytest
 pytest.importorskip("aiml_training", reason="aiml_training not available in CI")
 
 from audiosmith.exceptions import TrainingError
-from audiosmith.f5_finetune import F5FineTuneConfig, F5FineTuneTrainer
+from aiml_training.training.f5_finetune import F5FineTuneConfig, F5FineTuneTrainer
 
 logger = logging.getLogger(__name__)
 

@@ -2,8 +2,7 @@
 
 import pytest
 import numpy as np
-from unittest.mock import Mock, MagicMock, patch
-from typing import Tuple
+from unittest.mock import Mock
 
 from audiosmith.tts_protocol import TTSEngine, get_engine
 

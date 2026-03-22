@@ -1,6 +1,5 @@
 """Tests for audiosmith.emotion_config module."""
 
-import pytest
 
 from audiosmith.emotion_config import (
     EMOTION_TTS_MAP,

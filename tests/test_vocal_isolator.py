@@ -35,8 +35,9 @@ class TestGracefulFallback:
 
 
 @pytest.mark.skipif(
-    not __import__("importlib").util.find_spec("torch"),
-    reason="torch not available in CI",
+    not __import__("importlib").util.find_spec("torch")
+    or not __import__("importlib").util.find_spec("torchaudio"),
+    reason="torch/torchaudio not available in CI",
 )
 class TestIsolate:
     @pytest.fixture

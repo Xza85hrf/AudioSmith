@@ -4,13 +4,64 @@ from pathlib import Path
 
 import pytest
 
+from audiosmith.emotion_config import EMOTION_STYLE_MAP
 from audiosmith.models import DubbingConfig, DubbingSegment, PipelineState
-from audiosmith.pipeline import CHECKPOINT_FILE, DubbingPipeline
+from audiosmith.pipeline import CHECKPOINT_FILE, DubbingPipeline, _emotion_to_tts_params
 
 
 @pytest.fixture
 def config(tmp_path):
     return DubbingConfig(video_path=Path('video.mp4'), output_dir=tmp_path)
+
+
+class TestEmotionToTtsParams:
+    def test_known_emotion_returns_scaled_params(self):
+        result = _emotion_to_tts_params('happy', intensity=1.0)
+        assert result['exaggeration'] == pytest.approx(0.7)
+        assert result['cfg_weight'] == pytest.approx(0.5)
+
+    def test_unknown_emotion_returns_defaults(self):
+        result = _emotion_to_tts_params('nonexistent', intensity=1.0)
+        assert result['exaggeration'] == pytest.approx(0.5)
+        assert result['cfg_weight'] == pytest.approx(0.5)
+
+    def test_zero_intensity_collapses_to_midpoint(self):
+        result = _emotion_to_tts_params('angry', intensity=0.0)
+        assert result['exaggeration'] == pytest.approx(0.5)
+        assert result['cfg_weight'] == pytest.approx(0.5)
+
+
+class TestBuildSynthesisKwargs:
+    """Regression tests for EMOTION_STYLE_MAP usage in _build_synthesis_kwargs."""
+
+    def test_elevenlabs_style_uses_emotion_style_map(self, config):
+        p = DubbingPipeline(config)
+        seg = DubbingSegment(
+            index=0, start_time=0.0, end_time=1.0,
+            original_text='hello', translated_text='cześć',
+            metadata={'emotion': {'primary': 'happy'}},
+        )
+        kwargs = p._build_synthesis_kwargs('elevenlabs', seg, None, False, 24000)
+        assert kwargs['style'] == EMOTION_STYLE_MAP['happy']
+
+    def test_elevenlabs_style_defaults_for_unknown_emotion(self, config):
+        p = DubbingPipeline(config)
+        seg = DubbingSegment(
+            index=0, start_time=0.0, end_time=1.0,
+            original_text='hello', translated_text='cześć',
+            metadata={'emotion': {'primary': 'unknown_emotion'}},
+        )
+        kwargs = p._build_synthesis_kwargs('elevenlabs', seg, None, False, 24000)
+        assert kwargs['style'] == 0.0  # default fallback
+
+    def test_no_emotion_data_omits_style(self, config):
+        p = DubbingPipeline(config)
+        seg = DubbingSegment(
+            index=0, start_time=0.0, end_time=1.0,
+            original_text='hello', translated_text='cześć',
+        )
+        kwargs = p._build_synthesis_kwargs('elevenlabs', seg, None, False, 24000)
+        assert 'style' not in kwargs
 
 
 class TestDubbingPipelineInit:

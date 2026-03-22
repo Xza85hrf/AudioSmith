@@ -209,7 +209,6 @@ class TestEmotionProfileValidation:
     def test_centroid_whisper_high(self):
         """Test that whisper has high spectral centroid."""
         whisper = get_profile('whisper')
-        angry = get_profile('angry')
         neutral = get_profile('neutral')
         # Whisper should have higher centroid
         assert whisper.centroid_hz > neutral.centroid_hz

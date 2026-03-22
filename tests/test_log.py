@@ -1,10 +1,7 @@
 """Tests for audiosmith.log module."""
 
 import logging
-import tempfile
-from pathlib import Path
 
-import pytest
 
 from audiosmith.log import setup_logging, get_logger
 

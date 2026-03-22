@@ -380,8 +380,8 @@ def extract_voices(audio, output_dir, num_samples, sample_duration, sample_rate,
                     audio_path, num_samples=num_samples, sample_duration=sample_duration
                 )
 
-        # Create voice profiles
-        profiles = create_voice_profiles(voice_catalog.get_speakers(), voice_catalog)
+        # Create voice profiles (writes files as side effect)
+        create_voice_profiles(voice_catalog.get_speakers(), voice_catalog)
 
         # Save catalog if requested
         if catalog:

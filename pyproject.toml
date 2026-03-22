@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-quality = ["pyannote-audio>=3.0", "demucs>=4.0"]
+quality = ["pyannote-audio>=3.0", "demucs>=4.0", "torchaudio>=2.0"]
 gemma = ["transformers>=4.40", "accelerate>=0.27", "bitsandbytes>=0.42"]
 qwen3 = ["qwen-tts>=0.1"]
 piper = ["piper-tts>=1.2"]
@@ -45,6 +45,7 @@ ci = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "mypy>=1.0",
+    "bandit>=1.7",
 ]
 
 [project.scripts]

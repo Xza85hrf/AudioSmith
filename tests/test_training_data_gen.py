@@ -9,11 +9,13 @@ import pytest
 pytest.importorskip("aiml_training", reason="aiml_training not available in CI")
 
 from audiosmith.exceptions import TrainingError
-from audiosmith.polish_corpus import (_ABBREVIATIONS, ALL_POLISH_CHARS,
-                                      POLISH_DIACRITICS, PolishCorpusManager)
-from audiosmith.training_data_gen import (_EMOTION_TTS_MAP, Checkpoint,
-                                          TrainingDataConfig,
-                                          TrainingDataGenerator)
+from aiml_training.training.polish_corpus import (
+    _ABBREVIATIONS, ALL_POLISH_CHARS, POLISH_DIACRITICS, PolishCorpusManager,
+)
+from aiml_training.training.training_data_gen import (
+    Checkpoint, TrainingDataConfig, TrainingDataGenerator,
+)
+from audiosmith.emotion_config import EMOTION_TTS_MAP as _EMOTION_TTS_MAP
 
 SR = 24000
 

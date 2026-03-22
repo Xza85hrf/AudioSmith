@@ -496,7 +496,7 @@ class Qwen3TTS:
     ) -> str:
         """Generate a cache key for audio."""
         key_str = f"{text}|{voice}|{language}|{instruct}"
-        return hashlib.md5(key_str.encode()).hexdigest()
+        return hashlib.md5(key_str.encode(), usedforsecurity=False).hexdigest()
 
     def _cache_audio(self, key: str, audio: np.ndarray, sr: int):
         """Cache audio with size limit."""
