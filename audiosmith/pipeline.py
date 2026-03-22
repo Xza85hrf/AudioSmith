@@ -6,110 +6,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from audiosmith.error_codes import ErrorCode
+from audiosmith.emotion_config import (EMOTION_STYLE_MAP, EMOTION_TTS_MAP)
 from audiosmith.exceptions import DubbingError
 from audiosmith.models import (DubbingConfig, DubbingResult, DubbingSegment,
                                DubbingStep, PipelineState)
+from audiosmith.pipeline_config import ENGINE_PP_PRESETS, LANGUAGE_PP_OVERRIDES
 
 logger = logging.getLogger(__name__)
 
 CHECKPOINT_FILE = '.checkpoint.json'
 
-# Emotion → Chatterbox TTS parameter offsets (exaggeration, cfg_weight)
-_EMOTION_TTS_MAP: Dict[str, Dict[str, float]] = {
-    'happy': {'exaggeration': 0.7, 'cfg_weight': 0.5},
-    'sad': {'exaggeration': 0.3, 'cfg_weight': 0.4},
-    'angry': {'exaggeration': 0.9, 'cfg_weight': 0.7},
-    'fearful': {'exaggeration': 0.6, 'cfg_weight': 0.6},
-    'surprised': {'exaggeration': 0.8, 'cfg_weight': 0.5},
-    'whisper': {'exaggeration': 0.2, 'cfg_weight': 0.3},
-    'sarcastic': {'exaggeration': 0.6, 'cfg_weight': 0.5},
-    'tender': {'exaggeration': 0.3, 'cfg_weight': 0.4},
-    'excited': {'exaggeration': 0.8, 'cfg_weight': 0.6},
-    'determined': {'exaggeration': 0.7, 'cfg_weight': 0.6},
-}
-
-# Emotion → ElevenLabs style parameter (0.0 = neutral, 1.0 = expressive)
-_EMOTION_STYLE_MAP: Dict[str, float] = {
-    'neutral': 0.0,
-    'happy': 0.3,
-    'sad': 0.2,
-    'angry': 0.5,
-    'fearful': 0.4,
-    'surprised': 0.4,
-    'whisper': 0.1,
-    'excited': 0.5,
-    'tender': 0.2,
-    'sarcastic': 0.3,
-    'determined': 0.3,
-}
-
-
-# Per-engine post-processing presets (calibrated to match ElevenLabs quality)
-_ENGINE_PP_PRESETS: Dict[str, Dict] = {
-    'piper': dict(
-        enable_silence=True, enable_dynamics=True, enable_breath=True,
-        enable_warmth=False, enable_spectral_matching=True,
-        enable_micro_dynamics=True, enable_normalize=True,
-        target_rms_adaptive=True, spectral_intensity=0.8,
-    ),
-    'chatterbox': dict(
-        enable_silence=True, enable_dynamics=True, enable_breath=True,
-        enable_warmth=True, enable_spectral_matching=True,
-        enable_micro_dynamics=True, spectral_intensity=0.6,
-    ),
-    'fish': dict(
-        enable_silence=False, enable_dynamics=True, enable_breath=True,
-        enable_warmth=False, enable_spectral_matching=True,
-        enable_micro_dynamics=False, enable_normalize=True,
-        enable_silence_trim=True, max_silence_ms=100,
-        target_rms_adaptive=True, spectral_intensity=0.5,
-    ),
-    'qwen3': dict(
-        enable_silence=True, enable_dynamics=True, enable_breath=True,
-        enable_warmth=True, enable_spectral_matching=True,
-        enable_micro_dynamics=True, spectral_intensity=0.5,
-    ),
-    'f5': dict(
-        enable_silence=True, enable_dynamics=True, enable_breath=True,
-        enable_warmth=False, enable_spectral_matching=True,
-        enable_micro_dynamics=True, enable_normalize=True,
-        target_rms_adaptive=True, spectral_intensity=0.5,
-    ),
-    'indextts': dict(
-        enable_silence=False, enable_dynamics=False, enable_breath=False,
-        enable_warmth=False, enable_spectral_matching=False,
-        enable_micro_dynamics=False, enable_normalize=False,
-    ),
-    'cosyvoice': dict(
-        enable_silence=False, enable_dynamics=False, enable_breath=False,
-        enable_warmth=False, enable_spectral_matching=False,
-        enable_micro_dynamics=False, enable_normalize=True,
-    ),
-    'orpheus': dict(
-        enable_silence=False, enable_dynamics=False, enable_breath=False,
-        enable_warmth=False, enable_spectral_matching=False,
-        enable_micro_dynamics=False, enable_normalize=True,
-    ),
-}
-
-
-# Per-language post-processing overrides (stronger correction for non-English)
-_LANGUAGE_PP_OVERRIDES: Dict[str, Dict[str, Any]] = {
-    'pl': {
-        'spectral_intensity': 0.3,
-        'enable_spectral_matching': True,
-        'enable_dynamics': True,
-        'enable_breath': False,
-        'enable_normalize': True,
-        'target_rms_adaptive': False,
-        'target_rms': 0.13,
-    },
-}
-
 
 def _emotion_to_tts_params(emotion: str, intensity: float = 0.5) -> Dict[str, float]:
     """Convert emotion label + intensity to Chatterbox TTS parameters."""
-    params = _EMOTION_TTS_MAP.get(emotion, {'exaggeration': 0.5, 'cfg_weight': 0.5})
+    params = EMOTION_TTS_MAP.get(emotion, {'exaggeration': 0.5, 'cfg_weight': 0.5})
     # Scale towards defaults at low intensity, towards full values at high intensity
     return {
         'exaggeration': 0.5 + (params['exaggeration'] - 0.5) * intensity,
@@ -498,7 +408,7 @@ class DubbingPipeline:
                     style = None
                     emo_data = seg.metadata.get('emotion')
                     if emo_data:
-                        style = _EMOTION_STYLE_MAP.get(emo_data.get('primary', 'neutral'), 0.0)
+                        style = EMOTION_STYLE_MAP.get(emo_data.get('primary', 'neutral'), 0.0)
                     audio, sr = engine.synthesize(text, style=style)
                     wav = audio
                     sample_rate = sr
@@ -595,8 +505,8 @@ class DubbingPipeline:
                 try:
                     from audiosmith.tts_postprocessor import (
                         PostProcessConfig, TTSPostProcessor)
-                    preset = _ENGINE_PP_PRESETS.get(tts_engine_name, {}).copy()
-                    lang_overrides = _LANGUAGE_PP_OVERRIDES.get(self.config.target_language, {})
+                    preset = ENGINE_PP_PRESETS.get(tts_engine_name, {}).copy()
+                    lang_overrides = LANGUAGE_PP_OVERRIDES.get(self.config.target_language, {})
                     preset.update(lang_overrides)
                     preset['global_intensity'] = self.config.post_process_intensity
                     pp_config = PostProcessConfig(**preset)
