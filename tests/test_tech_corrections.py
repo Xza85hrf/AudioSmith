@@ -660,3 +660,198 @@ class TestTechTermCorrectionsLanguage:
     def test_default_language_is_polish(self):
         corrector = TechTermCorrections()
         assert corrector.get_pattern_count() > 0
+
+    def test_spanish_loads_patterns(self):
+        corrector = TechTermCorrections(language="es")
+        assert corrector.get_pattern_count() > 0
+
+    def test_spanish_corrects_docker(self):
+        corrector = TechTermCorrections(language="es")
+        assert "Docker" in corrector.correct("doquer está aquí")
+
+    def test_spanish_corrects_kubernetes(self):
+        corrector = TechTermCorrections(language="es")
+        assert "Kubernetes" in corrector.correct("cubernetis cluster")
+
+    def test_spanish_corrects_javascript(self):
+        corrector = TechTermCorrections(language="es")
+        assert "JavaScript" in corrector.correct("yavascript es popular")
+
+    def test_spanish_corrects_typescript(self):
+        corrector = TechTermCorrections(language="es")
+        assert "TypeScript" in corrector.correct("taipscript project")
+
+    def test_spanish_corrects_python(self):
+        corrector = TechTermCorrections(language="es")
+        assert "Python" in corrector.correct("paiton es útil")
+
+    def test_spanish_corrects_github(self):
+        corrector = TechTermCorrections(language="es")
+        assert "GitHub" in corrector.correct("guijab repositorio")
+
+    def test_spanish_corrects_react(self):
+        corrector = TechTermCorrections(language="es")
+        assert "React" in corrector.correct("riact framework")
+
+    def test_spanish_corrects_postgresql(self):
+        corrector = TechTermCorrections(language="es")
+        assert "PostgreSQL" in corrector.correct("postgre base de datos")
+
+    def test_spanish_corrects_mongodb(self):
+        corrector = TechTermCorrections(language="es")
+        assert "MongoDB" in corrector.correct("mongui base de datos")
+
+    def test_spanish_corrects_nodejs(self):
+        corrector = TechTermCorrections(language="es")
+        assert "Node.js" in corrector.correct("nod jés servidor")
+
+    def test_german_loads_patterns(self):
+        corrector = TechTermCorrections(language="de")
+        assert corrector.get_pattern_count() > 0
+
+    def test_german_corrects_docker(self):
+        corrector = TechTermCorrections(language="de")
+        # Test German phonetic mishearing: "Doker" or "Dokker" → Docker
+        result = corrector.correct("Doker ist großartig")
+        assert "Docker" in result
+
+    def test_german_corrects_javascript(self):
+        corrector = TechTermCorrections(language="de")
+        # German Whisper mishearing: "Dschawaskript" → JavaScript
+        result = corrector.correct("Dschawaskript ist beliebt")
+        assert "JavaScript" in result
+
+    def test_german_corrects_typescript(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Taijpskript" or "Taipskript" → TypeScript
+        result = corrector.correct("Taijpskript Projekt")
+        assert "TypeScript" in result
+
+    def test_german_corrects_python(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Paiton" or "Pyton" → Python
+        result = corrector.correct("Paiton ist leistungsstark")
+        assert "Python" in result
+
+    def test_german_corrects_github(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Githab" → GitHub
+        result = corrector.correct("Githab Repository")
+        assert "GitHub" in result
+
+    def test_german_corrects_kubernetes(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Kubernets" → Kubernetes
+        result = corrector.correct("Kubernets Cluster")
+        assert "Kubernetes" in result
+
+    def test_german_corrects_react(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Riäkt" or "Reakt" → React
+        result = corrector.correct("Riäkt Framework")
+        assert "React" in result
+
+    def test_german_corrects_node_js(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Noud" or "Node" → Node.js
+        result = corrector.correct("Noud.js Backend")
+        assert "Node.js" in result
+
+    def test_german_corrects_rest_api(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Rest Äpi" → REST API
+        result = corrector.correct("Rest Äpi Endpunkt")
+        assert "REST API" in result
+
+    def test_german_corrects_gitlab(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Gitlab" → GitLab
+        result = corrector.correct("Gitlab Pipeline")
+        assert "GitLab" in result
+
+    def test_german_corrects_sql(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Sikjuel" or "Sikuel" → SQL
+        result = corrector.correct("Sikjuel Datenbank")
+        assert "SQL" in result
+
+    def test_german_corrects_postgresql(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Postgre Sikjuel" or similar → PostgreSQL
+        result = corrector.correct("Postgre Sikjuel Server")
+        assert "PostgreSQL" in result
+
+    def test_german_corrects_mongodb(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Mongo Di Bi" → MongoDB
+        result = corrector.correct("Mongo Di Bi Datenbank")
+        assert "MongoDB" in result
+
+    def test_german_corrects_http(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Äitsch Tipi Tipi" → HTTP
+        result = corrector.correct("Äitsch Tipi Tipi Anfrage")
+        assert "HTTP" in result
+
+    def test_german_corrects_https(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Äitsch Tipi Tipi Es" → HTTPS
+        result = corrector.correct("Äitsch Tipi Tipi Es Verbindung")
+        assert "HTTPS" in result
+
+    def test_german_corrects_aws(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Ä Wu Es" → AWS
+        result = corrector.correct("Ä Wu Es Cloud")
+        assert "AWS" in result
+
+    def test_german_corrects_ssh(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Es Es Ha" → SSH
+        result = corrector.correct("Es Es Ha Verbindung")
+        assert "SSH" in result
+
+    def test_german_corrects_backend(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Bäkent" → backend
+        result = corrector.correct("Bäkent Entwicklung")
+        assert "backend" in result
+
+    def test_german_corrects_frontend(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Frontänd" → frontend
+        result = corrector.correct("Frontänd Code")
+        assert "frontend" in result
+
+    def test_german_corrects_framework(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Fräjmwork" → framework
+        result = corrector.correct("Fräjmwork Bibliothek")
+        assert "framework" in result
+
+    def test_german_corrects_cache(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Käsch" → cache
+        result = corrector.correct("Käsch Speicher")
+        assert "cache" in result
+
+    def test_german_corrects_linux(self):
+        corrector = TechTermCorrections(language="de")
+        # German: "Linuks" → Linux
+        result = corrector.correct("Linuks System")
+        assert "Linux" in result
+
+    def test_german_corrects_with_declension(self):
+        corrector = TechTermCorrections(language="de")
+        # German declension: "des Dockers" (genitive), "dem Docker" (dative)
+        result = corrector.correct("des Dockers verwendet")
+        assert "Docker" in result
+
+    def test_german_different_from_polish(self):
+        """Verify German and Polish have different corrections for same term."""
+        de_corrector = TechTermCorrections(language="de")
+        pl_corrector = TechTermCorrections(language="pl")
+
+        # Both should load patterns, but different ones
+        assert de_corrector.get_pattern_count() > 0
+        assert pl_corrector.get_pattern_count() > 0

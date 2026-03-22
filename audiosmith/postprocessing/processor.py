@@ -4,7 +4,8 @@ Main entry point that chains all spectral and dynamic processing filters.
 """
 
 import logging
-from typing import Any, Dict, Optional
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -51,6 +52,7 @@ class TTSPostProcessor:
             config: PostProcessConfig instance (uses defaults if None).
         """
         self.config = config or PostProcessConfig()
+        self.step_timings: List[Tuple[str, float]] = []
 
     def process(
         self,
@@ -97,6 +99,7 @@ class TTSPostProcessor:
         wav = audio.copy()
         orig_peak = np.max(np.abs(wav))
         steps_applied = 0
+        self.step_timings = []
 
         # Resolve emotion-adaptive targets
         emotion_profile = None
@@ -315,3 +318,16 @@ class TTSPostProcessor:
         emotion_intensity = emotion.get("intensity", 1.0)
 
         return base * emotion_mult * emotion_intensity  # type: ignore[no-any-return]
+
+    def _timed_step(
+        self, name: str, fn: Any, *args: Any, **kwargs: Any,
+    ) -> Any:
+        """Run a processing step and record its duration."""
+        t0 = time.perf_counter()
+        result = fn(*args, **kwargs)
+        self.step_timings.append((name, time.perf_counter() - t0))
+        return result
+
+    def get_timing_report(self) -> Dict[str, float]:
+        """Return per-step timing from the last process() call."""
+        return dict(self.step_timings)

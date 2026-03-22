@@ -59,7 +59,7 @@ LANGUAGES: dict[str, LanguageConfig] = {
         vowels=frozenset("aeiou"),
         stress_position="variable",
         syllable_timed=True,
-        has_tech_corrections=False,
+        has_tech_corrections=True,
     ),
     "fr": LanguageConfig(
         code="fr",
@@ -82,7 +82,7 @@ LANGUAGES: dict[str, LanguageConfig] = {
         vowels=frozenset("aeiouäöü"),
         stress_position="variable",
         syllable_timed=False,
-        has_tech_corrections=False,
+        has_tech_corrections=True,
     ),
 }
 

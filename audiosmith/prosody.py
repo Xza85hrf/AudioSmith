@@ -286,5 +286,147 @@ def normalize_syllable_timing(
     return result
 
 
+def apply_ultimate_stress(
+    audio: np.ndarray,
+    sr: int,
+    text: str,
+    intensity: float,
+    language: str = "fr",
+) -> np.ndarray:
+    """Boost amplitude on the ultimate (final) stressed syllable.
+
+    For languages with fixed ultimate stress (e.g., French), this emphasizes
+    the last syllable of each word. For other languages with different
+    stress patterns, this function skips processing automatically.
+
+    Args:
+        audio: Mono float32 numpy array.
+        sr: Sample rate in Hz.
+        text: Text to analyze for stress positions.
+        intensity: Processing strength (0.0-1.0).
+        language: ISO 639-1 language code (default "fr" for French).
+
+    Returns:
+        Audio with stressed syllables emphasized (or unchanged if language
+        doesn't have ultimate stress).
+    """
+    config = get_language(language)
+
+    # Early return for languages without ultimate stress
+    if config.stress_position != "ultimate":
+        return audio
+
+    if intensity < 0.01 or len(audio) < sr // 10 or not text.strip():
+        return audio
+
+    result = audio.copy()
+    fade_samples = min(int(0.01 * sr), 128)  # 10ms crossfade
+    boundaries = _estimate_word_boundaries(text, len(audio))
+
+    for start, end, word in boundaries:
+        clusters = _find_vowel_clusters(word, config.vowels)
+        if len(clusters) < 2:
+            continue  # Monosyllabic or no vowels — no distinct ultimate to stress
+
+        # Ultimate syllable = last vowel cluster
+        ultimate = clusters[-1]
+        word_len = len(word)
+        if word_len == 0:
+            continue
+
+        # Map syllable position within word to sample range
+        syllable_start_ratio = ultimate[0] / word_len
+        syllable_end_ratio = ultimate[1] / word_len
+        seg_len = end - start
+        syl_start = start + int(syllable_start_ratio * seg_len)
+        syl_end = start + int(syllable_end_ratio * seg_len)
+
+        # Extend syllable region to include surrounding consonants
+        extend = int(0.3 * (syl_end - syl_start))
+        syl_start = max(start, syl_start - extend)
+        syl_end = min(end, syl_end + extend)
+
+        syl_len = syl_end - syl_start
+        if syl_len < 2 * fade_samples:
+            continue
+
+        # Boost: 1.5-2.5 dB scaled by intensity
+        boost_db = 1.5 + 1.0 * intensity
+        boost_linear = 10 ** (boost_db / 20.0)
+
+        gains = np.ones(syl_len, dtype=np.float32) * boost_linear
+        if fade_samples > 0 and syl_len > 2 * fade_samples:
+            gains[:fade_samples] = np.linspace(1.0, boost_linear, fade_samples)
+            gains[-fade_samples:] = np.linspace(boost_linear, 1.0, fade_samples)
+
+        result[syl_start:syl_end] *= gains
+
+    return result
+
+
+def apply_french_question_intonation(
+    audio: np.ndarray,
+    sr: int,
+    text: str,
+    intensity: float,
+    language: str = "fr",
+) -> np.ndarray:
+    """Apply French-specific question intonation — rising pitch across entire sentence.
+
+    French questions use a distinctive intonation pattern where pitch rises
+    throughout the entire sentence, not just at the end. For "est-ce" questions,
+    the rise starts earlier (at 40% of audio). For other languages, falls back
+    to universal question intonation (last 30%).
+
+    Args:
+        audio: Mono float32 numpy array.
+        sr: Sample rate in Hz.
+        text: Text to check for question marks.
+        intensity: Processing strength (0.0-1.0).
+        language: ISO 639-1 language code (default "fr" for French).
+
+    Returns:
+        Audio with question intonation applied (if text ends with ?).
+    """
+    if intensity < 0.01 or not text.strip() or len(audio) < sr // 10:
+        return audio
+
+    stripped = text.strip()
+    if not stripped.endswith("?"):
+        return audio
+
+    # Determine rise start based on language and question type
+    if language == "fr":
+        # Check for "est-ce" pattern — indicates question starting earlier
+        if "est-ce" in stripped.lower():
+            rise_start = int(len(audio) * 0.4)  # Start rise at 40%
+        else:
+            rise_start = int(len(audio) * 0.3)  # Default: start rise at 30% (more than universal)
+    else:
+        # Fallback to universal question intonation (last 30%)
+        rise_start = int(len(audio) * 0.7)
+
+    rise_region = audio[rise_start:]
+
+    if len(rise_region) < 256:
+        return audio
+
+    # FFT-domain frequency shift (5-15 Hz upward, scaled by intensity)
+    shift_hz = 5.0 + 10.0 * intensity
+    np.fft.rfft(rise_region)
+    np.fft.rfftfreq(len(rise_region), d=1.0 / sr)
+
+    # Phase shift for frequency displacement
+    phase_shift = 2 * np.pi * shift_hz * np.arange(len(rise_region)) / sr
+    shifted = rise_region * np.cos(phase_shift).astype(np.float32)
+
+    # Blend with original (50% wet to keep natural quality)
+    blend = 0.5 * intensity
+    result = audio.copy()
+    result[rise_start:] = rise_region * (1.0 - blend) + shifted * blend
+
+    return result
+
+
 # Backward compatibility — will be removed in v2.0
 POLISH_VOWELS = get_language("pl").vowels

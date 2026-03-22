@@ -7,6 +7,7 @@ import numpy as np
 from click.testing import CliRunner
 
 from audiosmith.cli import cli
+from audiosmith.exceptions import AudioSmithError
 
 
 class TestCLI:
@@ -373,3 +374,265 @@ class TestDubIntegration:
 
         assert result.exit_code == 0
         assert 'Dubbing Complete' in result.output
+
+
+class TestTranslateCommand:
+    """E2E tests for translate command."""
+
+    def test_translate_basic(self, tmp_path):
+        """Translate SRT file with Polish target language."""
+        srt_file = tmp_path / "test.srt"
+        srt_file.write_text("1\n00:00:01,000 --> 00:00:05,000\nHello world\n\n")
+
+        mock_entry = MagicMock(index=1, start_time=1.0, end_time=5.0, text='Hello world')
+
+        def mock_translate_func(text, source_lang, target_lang, backend='argos'):
+            """Mock translation function."""
+            return 'Cześć świecie' if text == 'Hello world' else text
+
+        with patch('audiosmith.srt.parse_srt_file', return_value=[mock_entry]), \
+             patch('audiosmith.translate.translate', side_effect=mock_translate_func), \
+             patch('audiosmith.srt.write_srt'):
+            result = CliRunner().invoke(cli, [
+                'translate', str(srt_file), '--target-lang', 'pl'
+            ])
+
+        assert result.exit_code == 0, f"Failed: {result.output}\n{result.exception}"
+        assert 'Translation Complete' in result.output
+        assert '1' in result.output  # entry count
+
+    def test_translate_with_source_lang(self, tmp_path):
+        """Translate with explicit source language."""
+        srt_file = tmp_path / "test.srt"
+        srt_file.write_text("1\n00:00:01,000 --> 00:00:05,000\nHello\n\n")
+
+        mock_entry = MagicMock(index=1, start_time=1.0, end_time=5.0, text='Hello')
+
+        def mock_translate_func(text, source_lang, target_lang, backend='argos'):
+            return 'Hola' if target_lang == 'es' else text
+
+        with patch('audiosmith.srt.parse_srt_file', return_value=[mock_entry]), \
+             patch('audiosmith.translate.translate', side_effect=mock_translate_func), \
+             patch('audiosmith.srt.write_srt'):
+            result = CliRunner().invoke(cli, [
+                'translate', str(srt_file), '--target-lang', 'es', '--source-lang', 'en'
+            ])
+
+        assert result.exit_code == 0
+        assert 'Translation Complete' in result.output
+
+    def test_translate_missing_target_lang(self, tmp_path):
+        """Translate without required --target-lang fails."""
+        srt_file = tmp_path / "test.srt"
+        srt_file.write_text("1\n00:00:01,000 --> 00:00:05,000\nHello\n\n")
+
+        result = CliRunner().invoke(cli, ['translate', str(srt_file)])
+        assert result.exit_code != 0
+        assert 'target-lang' in result.output or 'required' in result.output.lower()
+
+    def test_translate_nonexistent_file(self):
+        """Translate with nonexistent SRT file fails."""
+        result = CliRunner().invoke(cli, [
+            'translate', '/nonexistent/file.srt', '--target-lang', 'pl'
+        ])
+        assert result.exit_code != 0
+
+    def test_translate_with_backend_option(self, tmp_path):
+        """Translate with explicit backend (gemma)."""
+        srt_file = tmp_path / "test.srt"
+        srt_file.write_text("1\n00:00:01,000 --> 00:00:05,000\nTest\n\n")
+
+        mock_entry = MagicMock(index=1, start_time=1.0, end_time=5.0, text='Test')
+        call_tracker = []
+
+        def mock_translate_func(text, source_lang, target_lang, backend='argos'):
+            call_tracker.append({'backend': backend})
+            return text
+
+        with patch('audiosmith.srt.parse_srt_file', return_value=[mock_entry]), \
+             patch('audiosmith.translate.translate', side_effect=mock_translate_func), \
+             patch('audiosmith.srt.write_srt'):
+            result = CliRunner().invoke(cli, [
+                'translate', str(srt_file), '--target-lang', 'de', '--backend', 'gemma'
+            ])
+
+        assert result.exit_code == 0
+        assert len(call_tracker) > 0
+        assert call_tracker[0]['backend'] == 'gemma'
+
+
+class TestTranscribeUrlCommand:
+    """E2E tests for transcribe-url command."""
+
+    def test_transcribe_url_basic(self):
+        """Transcribe URL from YouTube-like service."""
+        mock_segment = MagicMock(id='0', start=1.0, end=5.0, text='Hello from video')
+
+        with patch('audiosmith.download.download_media',
+                   return_value=(Path('/tmp/video.mp4'), 'Test Video')), \
+             patch('audiosmith.ffmpeg.extract_audio'), \
+             patch('audiosmith.transcribe.Transcriber') as mock_transcriber_class, \
+             patch('audiosmith.srt.write_srt'), \
+             patch('audiosmith.srt_formatter.SRTFormatter'):
+
+            # Setup transcriber mock
+            mock_transcriber = MagicMock()
+            mock_transcriber.transcribe.return_value = [mock_segment]
+            mock_transcriber_class.return_value = mock_transcriber
+
+            result = CliRunner().invoke(cli, ['transcribe-url', 'https://example.com/video'])
+
+        assert result.exit_code == 0, f"Failed: {result.output}\n{result.exception}"
+        assert 'URL Transcription Complete' in result.output
+        assert 'Test Video' in result.output
+
+    def test_transcribe_url_with_language(self):
+        """Transcribe URL with specific language."""
+        mock_segment = MagicMock(id='0', start=0.0, end=2.0, text='Bonjour')
+
+        with patch('audiosmith.download.download_media',
+                   return_value=(Path('/tmp/video.mp4'), 'French Video')), \
+             patch('audiosmith.ffmpeg.extract_audio'), \
+             patch('audiosmith.transcribe.Transcriber') as mock_transcriber_class, \
+             patch('audiosmith.srt.write_srt'), \
+             patch('audiosmith.srt_formatter.SRTFormatter'):
+
+            mock_transcriber = MagicMock()
+            mock_transcriber.transcribe.return_value = [mock_segment]
+            mock_transcriber_class.return_value = mock_transcriber
+
+            result = CliRunner().invoke(cli, [
+                'transcribe-url', 'https://example.com/video', '--language', 'fr'
+            ])
+
+        assert result.exit_code == 0
+        assert 'URL Transcription Complete' in result.output
+
+    def test_transcribe_url_with_output_format(self):
+        """Transcribe URL with JSON output format."""
+        mock_segment = {'start': 1.0, 'end': 3.0, 'text': 'Test'}
+
+        with patch('audiosmith.download.download_media',
+                   return_value=(Path('/tmp/video.mp4'), 'Test')), \
+             patch('audiosmith.ffmpeg.extract_audio'), \
+             patch('audiosmith.transcribe.Transcriber') as mock_transcriber_class, \
+             patch('audiosmith.srt_formatter.SRTFormatter'), \
+             patch('audiosmith.download.segments_to_json', return_value='{"segments": []}'):
+
+            mock_transcriber = MagicMock()
+            mock_transcriber.transcribe.return_value = [mock_segment]
+            mock_transcriber_class.return_value = mock_transcriber
+
+            result = CliRunner().invoke(cli, [
+                'transcribe-url', 'https://example.com/video', '--output', 'json'
+            ])
+
+        assert result.exit_code == 0
+
+    def test_transcribe_url_download_error(self):
+        """Transcribe URL fails when download_media raises error."""
+        with patch('audiosmith.download.download_media',
+                   side_effect=AudioSmithError("Download failed")):
+            result = CliRunner().invoke(cli, ['transcribe-url', 'https://invalid.example'])
+
+        assert result.exit_code != 0
+        assert 'Error' in result.output
+
+
+class TestInfoCommand:
+    """E2E tests for info command."""
+
+    def test_info_basic(self):
+        """Info command displays system info and TTS engines."""
+        result = CliRunner().invoke(cli, ['info'])
+        assert result.exit_code == 0
+        assert 'System' in result.output
+        assert 'TTS Engines' in result.output
+
+    def test_info_contains_python_version(self):
+        """Info shows Python version."""
+        result = CliRunner().invoke(cli, ['info'])
+        assert result.exit_code == 0
+        assert 'Python' in result.output
+
+    def test_info_contains_ffmpeg_check(self):
+        """Info shows FFmpeg availability."""
+        result = CliRunner().invoke(cli, ['info'])
+        assert result.exit_code == 0
+        assert 'FFmpeg' in result.output
+
+    def test_info_contains_capabilities(self):
+        """Info shows processing capabilities."""
+        result = CliRunner().invoke(cli, ['info'])
+        assert result.exit_code == 0
+        assert 'Capabilities' in result.output or 'Transcription' in result.output
+
+
+class TestVoicesCommand:
+    """E2E tests for voices command."""
+
+    def test_voices_all_engines(self):
+        """Voices command shows all TTS engines."""
+        result = CliRunner().invoke(cli, ['voices'])
+        assert result.exit_code == 0
+        assert 'Piper' in result.output or 'piper' in result.output.lower()
+        assert 'Chatterbox' in result.output or 'chatterbox' in result.output.lower()
+
+    def test_voices_piper_only(self):
+        """Voices command with --engine piper shows only piper voices."""
+        result = CliRunner().invoke(cli, ['voices', '--engine', 'piper'])
+        assert result.exit_code == 0
+        assert 'Piper' in result.output or 'piper' in result.output.lower()
+
+    def test_voices_chatterbox_only(self):
+        """Voices command with --engine chatterbox shows chatterbox info."""
+        result = CliRunner().invoke(cli, ['voices', '--engine', 'chatterbox'])
+        assert result.exit_code == 0
+        assert 'Chatterbox' in result.output or 'chatterbox' in result.output.lower()
+
+    def test_voices_qwen3_option(self):
+        """Voices command supports qwen3 engine."""
+        result = CliRunner().invoke(cli, ['voices', '--engine', 'qwen3'])
+        assert result.exit_code == 0
+        # Qwen3 should appear in output
+        assert 'Qwen' in result.output or 'qwen' in result.output.lower()
+
+
+class TestDubErrorHandling:
+    """Error path tests for dub command."""
+
+    def test_dub_pipeline_error(self, tmp_path):
+        """Dub command handles pipeline errors gracefully."""
+        video = tmp_path / "test.mp4"
+        video.write_bytes(b"fake video")
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.side_effect = AudioSmithError("Pipeline failed")
+
+        with patch('audiosmith.pipeline.DubbingPipeline', return_value=mock_pipeline):
+            result = CliRunner().invoke(cli, [
+                'dub', str(video), '--target-lang', 'es'
+            ])
+
+        assert result.exit_code != 0
+        assert 'Error' in result.output
+
+
+class TestTranscribeErrorHandling:
+    """Error path tests for transcribe command."""
+
+    def test_transcribe_nonexistent_file(self):
+        """Transcribe with nonexistent file fails."""
+        result = CliRunner().invoke(cli, [
+            'transcribe', '/nonexistent/audio.mp3'
+        ])
+        assert result.exit_code != 0
+
+
+class TestBatchCommandExtended:
+    """Extended tests for batch command error paths."""
+
+    def test_batch_missing_target_lang(self):
+        """Batch command requires --target-lang."""
+        result = CliRunner().invoke(cli, ['batch'])
+        assert result.exit_code != 0
