@@ -78,7 +78,7 @@ class LanguageDetector:
             matches = len(words & markers)
             scores[lang] = matches
 
-        best_lang = max(scores, key=scores.get) if scores else 'en'
+        best_lang = max(scores, key=lambda x: scores[x]) if scores else 'en'
         best_score = scores.get(best_lang, 0)
 
         if best_score == 0:

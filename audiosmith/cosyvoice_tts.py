@@ -271,9 +271,8 @@ class CosyVoice2TTS:
     def __enter__(self) -> "CosyVoice2TTS":
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.cleanup()
-        return False
 
     def _resolve_voice(self, voice: Optional[str]) -> Optional[Dict[str, Any]]:
         """Resolve voice name to reference info dict."""

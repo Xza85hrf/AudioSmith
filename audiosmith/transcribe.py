@@ -88,7 +88,7 @@ class Transcriber:
 
         lang = None if language in (None, 'auto') else language
 
-        segments, info = self._batched.transcribe(
+        segments, info = self._batched.transcribe(  # type: ignore[union-attr]
             str(audio_path),
             batch_size=self.batch_size,
             word_timestamps=True,

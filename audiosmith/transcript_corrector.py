@@ -72,7 +72,11 @@ class TranscriptCorrector:
         """Load domain corrections from a JSON file {wrong: correct}."""
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                if not isinstance(data, dict):
+                    logger.warning("Domain dict %s is not a dict", path)
+                    return {}
+                return {str(k): str(v) for k, v in data.items()}
         except (FileNotFoundError, json.JSONDecodeError) as e:
             logger.warning("Could not load domain dict %s: %s", path, e)
             return {}

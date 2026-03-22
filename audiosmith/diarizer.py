@@ -80,7 +80,7 @@ class Diarizer:
             )
 
             import torch
-            self._pipeline = self._pipeline.to(torch.device(device))
+            self._pipeline = self._pipeline.to(torch.device(device))  # type: ignore[attr-defined]
 
             # GPU optimizations for Volta+ (compute capability >= 7.0)
             if device.startswith('cuda'):
@@ -114,7 +114,7 @@ class Diarizer:
         audio_path = Path(audio_path)
 
         try:
-            diarization = self._pipeline(
+            diarization = self._pipeline(  # type: ignore[misc]
                 str(audio_path),
                 min_speakers=self.min_speakers,
                 max_speakers=self.max_speakers,

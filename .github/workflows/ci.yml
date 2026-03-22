@@ -61,7 +61,8 @@ jobs:
 
       - name: Type check
         run: |
-          mypy audiosmith/ tests/ --ignore-missing-imports || true
+          pip install mypy
+          mypy audiosmith/ --ignore-missing-imports
 
   security:
     runs-on: ubuntu-latest

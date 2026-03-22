@@ -269,9 +269,8 @@ class IndexTTS2TTS:
     def __enter__(self) -> "IndexTTS2TTS":
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.cleanup()
-        return False
 
     def _resolve_voice(self, voice: Optional[str]) -> Optional[Path]:
         """Resolve voice name or path to a Path object."""

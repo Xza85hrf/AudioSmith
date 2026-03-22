@@ -125,7 +125,7 @@ class TTSPostProcessor:
                     cap = lang_mod.get("spectral_intensity_cap", 1.0)
                     spec_intensity = min(spec_intensity, cap)
                 correction = compute_spectral_correction(
-                    measured, emotion_profile, spec_intensity,
+                    measured, emotion_profile, spec_intensity,  # type: ignore[arg-type]
                 )
                 # Apply language-specific spectral boosts
                 if lang_mod:
@@ -240,7 +240,7 @@ class TTSPostProcessor:
                 # Per-emotion overrides would be wrong here.
                 re_intensity = 0.4
                 re_correction = compute_spectral_correction(
-                    re_measured, emotion_profile, re_intensity,
+                    re_measured, emotion_profile, re_intensity,  # type: ignore[arg-type]
                 )
                 wav = apply_spectral_correction(wav, sample_rate, re_correction)
             except Exception as e:
@@ -314,4 +314,4 @@ class TTSPostProcessor:
         emotion_mult = EMOTION_INTENSITY.get(primary, 0.7)
         emotion_intensity = emotion.get("intensity", 1.0)
 
-        return base * emotion_mult * emotion_intensity
+        return base * emotion_mult * emotion_intensity  # type: ignore[no-any-return]

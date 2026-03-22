@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def translate_argos(text: str, source_lang: str, target_lang: str) -> str:
     """Translate using argostranslate (offline, fast)."""
     from argostranslate import translate as argos_translate
-    return argos_translate.translate(text, source_lang, target_lang)
+    return argos_translate.translate(text, source_lang, target_lang)  # type: ignore[no-any-return]
 
 
 def translate_gemma(
@@ -46,7 +46,7 @@ def translate_gemma(
         )
 
     messages = [{'role': 'user', 'content': f'Translate from {source_lang} to {target_lang}. Output ONLY the translation.\n\n{text}'}]
-    inputs = tokenizer.apply_chat_template(
+    inputs = tokenizer.apply_chat_template(  # type: ignore[union-attr]
         messages, return_tensors='pt', add_generation_prompt=True, return_dict=True,
     ).to(model.device)
     input_len = inputs['input_ids'].shape[1]
@@ -58,7 +58,7 @@ def translate_gemma(
             do_sample=False,
             repetition_penalty=1.2,
         )
-    return tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True).strip()
+    return tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True).strip()  # type: ignore[union-attr]
 
 
 def translate(text: str, source_lang: str, target_lang: str, backend: str = 'argos') -> str:

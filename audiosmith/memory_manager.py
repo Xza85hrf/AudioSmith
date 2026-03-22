@@ -45,7 +45,7 @@ class MemoryManager:
         """Check if at least min_gb of system memory is available."""
         try:
             import psutil
-            return psutil.virtual_memory().available >= min_gb * (1024 ** 3)
+            return psutil.virtual_memory().available >= min_gb * (1024 ** 3)  # type: ignore[no-any-return]
         except ImportError:
             return True
 

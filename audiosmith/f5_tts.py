@@ -331,13 +331,13 @@ class F5TTS:
             audio_input = str(path)
         else:
             # Tuple of (audio_array, sample_rate)
-            audio_input = audio_path_or_array
+            audio_input = audio_path_or_array  # type: ignore[assignment]
 
         try:
             processed_audio, processed_text = preprocess_ref_audio_text(
                 audio_input, ref_text or "",
             )
-            self._voice_cache[name] = (processed_audio, processed_text)
+            self._voice_cache[name] = (processed_audio, processed_text)  # type: ignore[assignment]
             logger.info("Voice '%s' cached", name)
             return name
 
@@ -390,6 +390,6 @@ class F5TTS:
     def __enter__(self) -> "F5TTS":
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:  # type: ignore[exit-return]
         self.cleanup()
         return False

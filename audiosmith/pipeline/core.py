@@ -1,4 +1,6 @@
-"""6-step dubbing pipeline with JSON checkpoint resume."""
+"""Core DubbingPipeline orchestrator class."""
+
+from __future__ import annotations
 
 import logging
 import time
@@ -6,28 +8,21 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from audiosmith.error_codes import ErrorCode
-from audiosmith.emotion_config import EMOTION_STYLE_MAP, EMOTION_TTS_MAP
 from audiosmith.exceptions import DubbingError
 from audiosmith.models import (DubbingConfig, DubbingResult, DubbingSegment,
                                DubbingStep, PipelineState)
-from audiosmith.pipeline_config import ENGINE_PP_PRESETS, LANGUAGE_PP_OVERRIDES
+from audiosmith.pipeline.helpers import (
+    _dicts_to_segments, _dedup_repeated_words, _segments_to_dicts,
+    _write_srt, _write_srt_from_schedule,
+)
+from audiosmith.pipeline.tts_synthesis import TTSSynthesisMixin
 
 logger = logging.getLogger(__name__)
 
 CHECKPOINT_FILE = '.checkpoint.json'
 
 
-def _emotion_to_tts_params(emotion: str, intensity: float = 0.5) -> Dict[str, float]:
-    """Convert emotion label + intensity to Chatterbox TTS parameters."""
-    params = EMOTION_TTS_MAP.get(emotion, {'exaggeration': 0.5, 'cfg_weight': 0.5})
-    # Scale towards defaults at low intensity, towards full values at high intensity
-    return {
-        'exaggeration': 0.5 + (params['exaggeration'] - 0.5) * intensity,
-        'cfg_weight': 0.5 + (params['cfg_weight'] - 0.5) * intensity,
-    }
-
-
-class DubbingPipeline:
+class DubbingPipeline(TTSSynthesisMixin):
     """Orchestrates the 6-step dubbing pipeline with optional resume."""
 
     def __init__(self, config: DubbingConfig):
@@ -93,7 +88,7 @@ class DubbingPipeline:
         from audiosmith.srt import parse_srt_file, timestamp_to_seconds
 
         srt_entries = parse_srt_file(srt_path)
-        srt_segments = [
+        srt_segments: list[dict[str, float | str]] = [
             {'start': timestamp_to_seconds(e.start_time),
              'end': timestamp_to_seconds(e.end_time),
              'text': e.text}
@@ -103,19 +98,21 @@ class DubbingPipeline:
         matched_count = 0
         for seg in segments:
             # Find the SRT segment with maximum time overlap
-            best_match = None
+            best_match: dict[str, float | str] | None = None
             best_overlap = 0.0
             for srt_seg in srt_segments:
                 # Calculate overlap duration
-                overlap_start = max(seg.start_time, srt_seg['start'])
-                overlap_end = min(seg.end_time, srt_seg['end'])
+                srt_start = float(srt_seg['start'])  # type: ignore[index, assignment]
+                srt_end = float(srt_seg['end'])  # type: ignore[index]
+                overlap_start = max(seg.start_time, srt_start)
+                overlap_end = min(seg.end_time, srt_end)
                 overlap = max(0.0, overlap_end - overlap_start)
                 if overlap > best_overlap:
                     best_overlap = overlap
                     best_match = srt_seg
 
             if best_match and best_overlap > 0.0:
-                seg.translated_text = best_match['text']
+                seg.translated_text = best_match['text']  # type: ignore[assignment]
                 seg.metadata['translation_source'] = 'external_srt'
                 matched_count += 1
             else:
@@ -140,7 +137,7 @@ class DubbingPipeline:
         from audiosmith.srt import parse_srt_file, timestamp_to_seconds
 
         srt_entries = parse_srt_file(srt_path)
-        segments = []
+        segments: List[DubbingSegment] = []
 
         for i, entry in enumerate(srt_entries):
             text = entry.text.strip()
@@ -301,403 +298,6 @@ class DubbingPipeline:
         return result
 
     # ------------------------------------------------------------------
-    # Step 4: Generate TTS
-    # ------------------------------------------------------------------
-
-    # Languages each engine handles well
-    _QWEN3_LANGS = {'en', 'zh', 'ja', 'ko', 'de', 'fr', 'ru', 'pt', 'es', 'it'}
-    _PIPER_LANGS = {'en', 'pl', 'de'}
-    _FISH_LANGS = {'en', 'zh', 'ja', 'ko', 'de', 'fr', 'es', 'pt', 'ru', 'nl', 'it', 'pl', 'ar'}
-    _INDEXTTS_LANGS = {'en', 'zh'}
-    _COSYVOICE_LANGS = {'zh', 'en', 'ja', 'ko', 'de', 'es', 'fr', 'it', 'ru'}
-    _ORPHEUS_LANGS = {'en', 'zh', 'es', 'fr', 'de', 'it', 'pt', 'hi', 'ko', 'tr', 'ja', 'th', 'ar'}
-    _ELEVENLABS_LANGS = {
-        'en', 'es', 'de', 'fr', 'it', 'pt', 'pl', 'ru', 'ja', 'ko', 'zh',
-        'ar', 'bg', 'cs', 'da', 'nl', 'fi', 'el', 'hi', 'hu', 'id', 'ms',
-        'no', 'ro', 'sk', 'sv', 'ta', 'th', 'tr', 'uk', 'vi',
-    }
-
-    def _resolve_engine(self) -> str:
-        """Pick the best TTS engine for the target language."""
-        import os
-        target = self.config.target_language
-        # Prefer ElevenLabs when API key is available (best quality)
-        if os.getenv('ELEVENLABS_API_KEY') and target in self._ELEVENLABS_LANGS:
-            logger.info("Auto-selected ElevenLabs TTS for '%s' (API key present)", target)
-            return 'elevenlabs'
-        if os.getenv('FISH_API_KEY') and target in self._FISH_LANGS:
-            logger.info("Auto-selected Fish Speech TTS for '%s' (API key present)", target)
-            return 'fish'
-        if self.config.cosyvoice_model_dir and target in self._COSYVOICE_LANGS:
-            logger.info("Auto-selected CosyVoice2 for '%s' (local, highest MOS)", target)
-            return 'cosyvoice'
-        if self.config.detect_emotion and target in self._INDEXTTS_LANGS:
-            logger.info("Auto-selected IndexTTS-2 for '%s' (emotion-aware)", target)
-            return 'indextts'
-        if target in self._ORPHEUS_LANGS:
-            logger.info("Auto-selected Orpheus TTS for '%s' (expressive local)", target)
-            return 'orpheus'
-        if target in self._QWEN3_LANGS:
-            logger.info("Auto-selected Qwen3 TTS for '%s'", target)
-            return 'qwen3'
-        if target in self._PIPER_LANGS:
-            # Only use Piper if the native voice model is actually installed
-            voice = self._PIPER_VOICES.get(target)
-            if voice:
-                voice_dir = Path.home() / '.local' / 'share' / 'piper-voices'
-                if (voice_dir / f'{voice}.onnx').exists():
-                    logger.info("Auto-selected Piper TTS for '%s' (native voice model)", target)
-                    return 'piper'
-                logger.info(
-                    "Piper voice '%s' not installed, falling back to Chatterbox for '%s'",
-                    voice, target,
-                )
-        logger.info("Auto-selected Chatterbox TTS for '%s' (multilingual fallback)", target)
-        return 'chatterbox'
-
-    def _generate_tts(self, segments: List[DubbingSegment]) -> List[DubbingSegment]:
-        import soundfile as sf
-
-        tts_dir = Path(self.config.output_dir) / 'tts_segments'
-        tts_dir.mkdir(parents=True, exist_ok=True)
-
-        tts_engine_name = getattr(self.config, 'tts_engine', 'chatterbox')
-        if tts_engine_name == 'auto':
-            tts_engine_name = self._resolve_engine()
-        prompt = str(self.config.audio_prompt_path) if self.config.audio_prompt_path else None
-
-        # Determine if this is Chatterbox with multi-voice features
-        use_multi = False
-        if tts_engine_name == 'chatterbox':
-            engine, sample_rate, use_multi = self._init_chatterbox_engine(segments)
-        else:
-            # Use factory for all other engines
-            engine = self._create_engine_with_factory(tts_engine_name)
-            sample_rate = engine.sample_rate
-
-        for seg in segments:
-            text = seg.translated_text or seg.original_text
-            if not text.strip():
-                continue
-
-            # Skip segments whose TTS audio already exists on disk (resume-safe)
-            wav_path = tts_dir / f'seg_{seg.index:04d}.wav'
-            if wav_path.exists() and wav_path.stat().st_size > 0:
-                seg.tts_audio_path = wav_path
-                info = sf.info(str(wav_path))
-                seg.tts_duration_ms = int(info.duration * 1000)
-                logger.debug("Skipping TTS for segment %d (cached: %s)", seg.index, wav_path)
-                continue
-
-            # Collapse 3+ consecutive identical words to 2 (prevents TTS looping)
-            text = self._dedup_repeated_words(text)
-
-            try:
-                # Build engine-specific kwargs
-                synth_kwargs = self._build_synthesis_kwargs(
-                    tts_engine_name, seg, prompt, use_multi, sample_rate
-                )
-
-                # Piper needs special handling for length_scale
-                if tts_engine_name == 'piper':
-                    window_ms = synth_kwargs.pop('_window_ms', 0)
-                    audio, sr = engine.synthesize(text, **synth_kwargs)
-                    first_dur_ms = int(len(audio) / sample_rate * 1000)
-                    if first_dur_ms > window_ms and window_ms > 0:
-                        ls = max(window_ms / first_dur_ms, 0.5)
-                        logger.debug(
-                            "Seg %d: %dms TTS > %dms window, re-gen with length_scale=%.2f",
-                            seg.index, first_dur_ms, window_ms, ls,
-                        )
-                        audio, sr = engine.synthesize(text, length_scale=ls, **{k: v for k, v in synth_kwargs.items() if k != 'language'})
-                    wav = audio
-                    sample_rate = sr
-                else:
-                    # All other engines: synthesize normally (return tuple via protocol)
-                    audio, sr = engine.synthesize(text, **synth_kwargs)
-                    wav = audio
-                    sample_rate = sr
-
-            except Exception as e:
-                logger.warning("TTS failed for segment %d, skipping: %s", seg.index, e)
-                continue
-
-            # Post-process TTS for naturalness (skip cloud/emotion-native engines)
-            if self.config.post_process_tts and tts_engine_name not in ('elevenlabs', 'indextts', 'cosyvoice', 'orpheus'):
-                try:
-                    from audiosmith.tts_postprocessor import (
-                        PostProcessConfig, TTSPostProcessor)
-                    preset = ENGINE_PP_PRESETS.get(tts_engine_name, {}).copy()
-                    lang_overrides = LANGUAGE_PP_OVERRIDES.get(self.config.target_language, {})
-                    preset.update(lang_overrides)
-                    preset['global_intensity'] = self.config.post_process_intensity
-                    pp_config = PostProcessConfig(**preset)
-                    pp = TTSPostProcessor(pp_config)
-                    wav = pp.process(
-                        wav, sample_rate,
-                        text=text,
-                        emotion=seg.metadata.get('emotion'),
-                        language=self.config.target_language,
-                    )
-                except Exception as e:
-                    logger.warning("Post-processing failed for seg %d, using raw: %s", seg.index, e)
-
-            wav_path = tts_dir / f'seg_{seg.index:04d}.wav'
-            sf.write(str(wav_path), wav, sample_rate)
-            seg.tts_audio_path = wav_path
-            info = sf.info(str(wav_path))
-            seg.tts_duration_ms = int(info.duration * 1000)
-
-        engine.cleanup() if hasattr(engine, 'cleanup') else None
-        if hasattr(engine, 'unload'):
-            engine.unload()
-        return segments
-
-    def _init_chatterbox_engine(self, segments):
-        has_speakers = any(s.speaker_id for s in segments)
-        has_emotion = any(s.metadata.get('emotion') for s in segments)
-        use_multi = has_speakers or has_emotion
-
-        if use_multi:
-            from audiosmith.multi_voice_tts import MultiVoiceTTS
-            engine = MultiVoiceTTS(
-                device=self.config.whisper_device,
-                language=self.config.target_language,
-                default_exaggeration=self.config.chatterbox_exaggeration,
-                default_cfg_weight=self.config.chatterbox_cfg_weight,
-            )
-            if self.config.audio_prompt_path:
-                engine.set_default_voice(str(self.config.audio_prompt_path))
-                voice_dir = self.config.audio_prompt_path.parent
-                speaker_ids = list({s.speaker_id for s in segments if s.speaker_id})
-                engine.auto_assign_voices(speaker_ids, voice_dir)
-            engine.load_model()
-        else:
-            from audiosmith.tts import ChatterboxTTS
-            engine = ChatterboxTTS(device=self.config.whisper_device)
-            engine.load_model()
-
-        return engine, engine.sample_rate, use_multi
-
-    def _init_elevenlabs_engine(self):
-        """Initialize ElevenLabs TTS engine."""
-        from audiosmith.elevenlabs_tts import ElevenLabsTTS
-        engine = ElevenLabsTTS(
-            model_id=self.config.elevenlabs_model,
-            voice_id=self.config.elevenlabs_voice_id,
-            voice_name=self.config.elevenlabs_voice_name,
-        )
-        if self.config.audio_prompt_path:
-            engine.create_voice_clone(
-                voice_name='clone',
-                audio_files=[str(self.config.audio_prompt_path)],
-            )
-        return engine, engine.sample_rate
-
-    def _init_qwen3_engine(self):
-        from audiosmith.qwen3_tts import Qwen3TTS
-        engine = Qwen3TTS(device=self.config.whisper_device)
-        if self.config.audio_prompt_path:
-            engine.load_model('base')
-            engine.create_voice_clone(
-                voice_name='clone',
-                ref_audio=str(self.config.audio_prompt_path),
-            )
-        else:
-            engine.load_model('custom_voice')
-        return engine, engine.sample_rate
-
-    _PIPER_VOICES = {
-        'en': 'en_US-lessac-medium',
-        'pl': 'pl_PL-darkman-medium',
-        'de': 'de_DE-thorsten-medium',
-    }
-
-    def _init_piper_engine(self):
-        from audiosmith.piper_tts import PiperTTS
-
-        voice = self._PIPER_VOICES.get(
-            self.config.target_language, 'en_US-lessac-medium',
-        )
-        voice_dir = Path.home() / '.local' / 'share' / 'piper-voices'
-        model_path = voice_dir / f'{voice}.onnx'
-
-        if not model_path.exists():
-            available = list(voice_dir.glob('*.onnx')) if voice_dir.exists() else []
-            if available:
-                model_path = available[0]
-                logger.warning(
-                    "Piper voice '%s' not found, falling back to '%s'",
-                    voice, model_path.stem,
-                )
-            else:
-                from audiosmith.exceptions import TTSError
-                raise TTSError(f"No Piper voice models found in {voice_dir}")
-
-        logger.info("Using Piper voice: %s", model_path.stem)
-        engine = PiperTTS(model_path=model_path)
-        return engine, engine.sample_rate
-
-    def _init_f5_engine(self):
-        """Initialize F5-TTS engine (local, flow-matching)."""
-        from audiosmith.f5_tts import F5TTS
-        engine = F5TTS(
-            model_name=self.config.f5_model,
-            device=self.config.whisper_device,
-            checkpoint_path=str(self.config.f5_checkpoint) if self.config.f5_checkpoint else None,
-        )
-        if self.config.audio_prompt_path:
-            engine.clone_voice(
-                'clone',
-                audio_path_or_array=str(self.config.audio_prompt_path),
-                ref_text=self.config.f5_ref_text,
-            )
-        return engine, engine.sample_rate
-
-    def _init_fish_engine(self):
-        """Initialize Fish Speech TTS (cloud API)."""
-        from audiosmith.fish_speech_tts import FishSpeechTTS
-        engine = FishSpeechTTS()
-        if self.config.audio_prompt_path:
-            engine.create_voice_clone(
-                voice_name='clone',
-                ref_audio=str(self.config.audio_prompt_path),
-            )
-        return engine, engine.sample_rate
-
-    def _init_indextts_engine(self):
-        """Initialize IndexTTS-2 engine (local, emotion-aware EN/ZH)."""
-        from audiosmith.indextts_tts import IndexTTS2TTS
-        engine = IndexTTS2TTS(
-            model_variant=self.config.indextts_model,
-            device=self.config.whisper_device,
-            emo_alpha=self.config.indextts_emo_alpha,
-        )
-        if self.config.audio_prompt_path:
-            engine.create_voice_clone('clone', ref_audio=self.config.audio_prompt_path)
-        return engine, engine.sample_rate
-
-    def _init_cosyvoice_engine(self):
-        """Initialize CosyVoice2 engine (local, highest MOS)."""
-        from audiosmith.cosyvoice_tts import CosyVoice2TTS
-        engine = CosyVoice2TTS(
-            model_dir=self.config.cosyvoice_model_dir,
-            device=self.config.whisper_device,
-        )
-        if self.config.audio_prompt_path:
-            engine.create_voice_clone('clone', ref_audio=self.config.audio_prompt_path)
-        return engine, engine.sample_rate
-
-    def _init_orpheus_engine(self):
-        """Initialize Orpheus TTS engine (local, expressive)."""
-        from audiosmith.orpheus_tts import OrpheusTTS
-        engine = OrpheusTTS(
-            voice=self.config.orpheus_voice,
-            temperature=self.config.orpheus_temperature,
-        )
-        if self.config.audio_prompt_path:
-            engine.create_voice_clone('clone', ref_audio=self.config.audio_prompt_path)
-        return engine, engine.sample_rate
-
-    def _create_engine_with_factory(self, engine_name: str):
-        """Create an engine instance with the factory, handling voice cloning."""
-        from audiosmith.tts_protocol import get_engine
-
-        engine = get_engine(engine_name)
-
-        # Handle voice cloning for engines that support it
-        if self.config.audio_prompt_path:
-            if engine_name == 'qwen3':
-                engine.load_model('base')
-                engine.create_voice_clone(
-                    voice_name='clone',
-                    ref_audio=str(self.config.audio_prompt_path),
-                )
-            elif engine_name == 'f5':
-                engine.clone_voice(
-                    'clone',
-                    audio_path_or_array=str(self.config.audio_prompt_path),
-                    ref_text=self.config.f5_ref_text,
-                )
-            elif engine_name in ('fish', 'indextts', 'cosyvoice', 'orpheus'):
-                engine.create_voice_clone('clone', ref_audio=self.config.audio_prompt_path)
-            elif engine_name == 'elevenlabs':
-                engine.create_voice_clone(
-                    voice_name='clone',
-                    audio_files=[str(self.config.audio_prompt_path)],
-                )
-
-        return engine
-
-    def _build_synthesis_kwargs(
-        self, engine_name: str, seg: DubbingSegment, prompt: Optional[str],
-        use_multi: bool, sample_rate: int
-    ) -> Dict[str, Any]:
-        """Build engine-specific synthesis kwargs for a segment.
-
-        All engines accept these kwargs but only use what applies to them
-        (the protocol allows **kwargs, so extra params are safely ignored).
-        """
-        kwargs: Dict[str, Any] = {}
-
-        # Emotion/style parameters (most engines support)
-        emo_data = seg.metadata.get('emotion')
-        if emo_data:
-            if engine_name == 'elevenlabs':
-                # ElevenLabs uses style (0.0 = neutral, 1.0 = expressive)
-                kwargs['style'] = EMOTION_STYLE_MAP.get(
-                    emo_data.get('primary', 'neutral'), 0.0
-                )
-            elif engine_name == 'fish':
-                # Fish Speech uses emotion name
-                kwargs['emotion'] = emo_data.get('primary')
-            elif engine_name == 'orpheus':
-                # Orpheus uses emotion name
-                kwargs['emotion'] = emo_data.get('primary')
-
-        # Voice parameters (cloning or preset)
-        if engine_name == 'qwen3':
-            kwargs['voice'] = 'clone' if prompt else 'Ryan'
-        elif engine_name in ('fish', 'f5', 'indextts', 'cosyvoice'):
-            kwargs['voice'] = 'clone' if prompt else None
-        elif engine_name == 'orpheus':
-            kwargs['voice'] = 'clone' if prompt else self.config.orpheus_voice
-
-        # Language (most engines support it)
-        if engine_name != 'chatterbox':
-            kwargs['language'] = self.config.target_language
-
-        # Engine-specific parameters
-        if engine_name == 'indextts':
-            kwargs['emotion_prompt'] = self.config.indextts_emotion_prompt
-            if seg.duration_ms > 0:
-                kwargs['target_duration_ms'] = seg.duration_ms
-        elif engine_name == 'cosyvoice':
-            kwargs['instruct'] = self.config.cosyvoice_instruct
-        elif engine_name == 'f5':
-            kwargs['speed'] = self.config.f5_speed
-        elif engine_name == 'piper':
-            # Special: Piper needs length_scale to fit the segment window
-            window_ms = int((seg.end_time - seg.start_time) * 1000)
-            if window_ms > 0:
-                # Will be handled in calling code after first synthesis
-                kwargs['_window_ms'] = window_ms
-        elif engine_name == 'chatterbox' and use_multi:
-            # Multi-voice Chatterbox uses speaker_id and emotion_params
-            kwargs['speaker_id'] = seg.speaker_id
-            if emo_data:
-                kwargs['emotion_params'] = _emotion_to_tts_params(
-                    emo_data['primary'], emo_data.get('intensity', 0.5),
-                )
-        elif engine_name == 'chatterbox':
-            # Single-voice Chatterbox uses audio prompt
-            kwargs['audio_prompt_path'] = prompt
-            kwargs['exaggeration'] = self.config.chatterbox_exaggeration
-            kwargs['cfg_weight'] = self.config.chatterbox_cfg_weight
-
-        return kwargs
-
-    # ------------------------------------------------------------------
     # Step 5: Mix audio
     # ------------------------------------------------------------------
     def _mix_audio(self, segments: List[DubbingSegment], total_duration: float):
@@ -732,108 +332,17 @@ class DubbingPipeline:
         if self.config.burn_subtitles:
             srt_path = Path(self.config.output_dir) / 'subtitles.srt'
             if scheduled:
-                self._write_srt_from_schedule(scheduled, srt_path)
+                _write_srt_from_schedule(scheduled, srt_path)
             else:
-                self._write_srt(segments, srt_path)
+                _write_srt(segments, srt_path)
 
         out_path = Path(self.config.output_dir) / f'{video_path.stem}_dubbed.mp4'
         encode_video(video_path, dubbed_audio, out_path, subtitle_path=srt_path)
         return out_path
 
     # ------------------------------------------------------------------
-    # Helpers
+    # Checkpoint persistence
     # ------------------------------------------------------------------
-    @staticmethod
-    def _segments_to_dicts(segments: List[DubbingSegment]) -> List[Dict[str, Any]]:
-        result = []
-        for s in segments:
-            result.append({
-                'index': s.index,
-                'start_time': s.start_time,
-                'end_time': s.end_time,
-                'original_text': s.original_text,
-                'translated_text': s.translated_text,
-                'speaker_id': s.speaker_id,
-                'metadata': s.metadata,
-                'tts_audio_path': str(s.tts_audio_path) if s.tts_audio_path else None,
-                'tts_duration_ms': s.tts_duration_ms,
-            })
-        return result
-
-    @staticmethod
-    def _dicts_to_segments(dicts: List[Dict[str, Any]]) -> List[DubbingSegment]:
-        segments = []
-        for d in dicts:
-            seg = DubbingSegment(
-                index=d['index'],
-                start_time=d['start_time'],
-                end_time=d['end_time'],
-                original_text=d['original_text'],
-                translated_text=d.get('translated_text', ''),
-            )
-            seg.speaker_id = d.get('speaker_id')
-            seg.metadata = d.get('metadata', {})
-            if d.get('tts_audio_path'):
-                seg.tts_audio_path = Path(d['tts_audio_path'])
-            seg.tts_duration_ms = d.get('tts_duration_ms')
-            segments.append(seg)
-        return segments
-
-    @staticmethod
-    def _write_srt(segments: List[DubbingSegment], path: Path) -> None:
-        from audiosmith.srt import write_srt
-        from audiosmith.srt_formatter import SRTFormatter
-
-        formatter = SRTFormatter()
-        raw_segments = [
-            {
-                'text': seg.translated_text or seg.original_text,
-                'start': seg.start_time,
-                'end': seg.end_time,
-                'words': [],
-            }
-            for seg in segments
-        ]
-        entries = formatter.format_segments(raw_segments)
-        write_srt(entries, path)
-
-    @staticmethod
-    def _write_srt_from_schedule(scheduled: List, path: Path) -> None:
-        """Write SRT using the mixer's actual placement times, not original segment times."""
-        from audiosmith.srt import write_srt
-        from audiosmith.srt_formatter import SRTFormatter
-
-        formatter = SRTFormatter()
-        raw_segments = [
-            {
-                'text': item.segment.translated_text or item.segment.original_text,
-                'start': item.place_at_ms / 1000.0,
-                'end': (item.place_at_ms + item.actual_duration_ms) / 1000.0,
-                'words': [],
-            }
-            for item in scheduled
-        ]
-        entries = formatter.format_segments(raw_segments)
-        write_srt(entries, path)
-
-    @staticmethod
-    def _dedup_repeated_words(text: str, max_repeats: int = 2) -> str:
-        """Collapse runs of 3+ identical consecutive words to max_repeats."""
-        words = text.split()
-        if len(words) < 3:
-            return text
-        result = [words[0]]
-        count = 1
-        for w in words[1:]:
-            if w.lower() == result[-1].lower():
-                count += 1
-                if count <= max_repeats:
-                    result.append(w)
-            else:
-                result.append(w)
-                count = 1
-        return ' '.join(result)
-
     def _extract_speaker_voices(
         self,
         segments: List[DubbingSegment],
@@ -883,6 +392,29 @@ class DubbingPipeline:
 
     def _save_checkpoint(self) -> None:
         self.state.save(self.checkpoint_path)
+
+    # ------------------------------------------------------------------
+    # Backward-compatible wrapper methods for helpers
+    # ------------------------------------------------------------------
+    def _segments_to_dicts(self, segments: List[DubbingSegment]) -> List[Dict[str, Any]]:
+        """Backward-compatible wrapper for the helper function."""
+        return _segments_to_dicts(segments)
+
+    def _dicts_to_segments(self, dicts: List[Dict[str, Any]]) -> List[DubbingSegment]:
+        """Backward-compatible wrapper for the helper function."""
+        return _dicts_to_segments(dicts)
+
+    def _write_srt(self, segments: List[DubbingSegment], path: Path) -> None:
+        """Backward-compatible wrapper for the helper function."""
+        return _write_srt(segments, path)
+
+    def _write_srt_from_schedule(self, scheduled: List, path: Path) -> None:
+        """Backward-compatible wrapper for the helper function."""
+        return _write_srt_from_schedule(scheduled, path)
+
+    def _dedup_repeated_words(self, text: str, max_repeats: int = 2) -> str:
+        """Backward-compatible wrapper for the helper function."""
+        return _dedup_repeated_words(text, max_repeats)
 
     # ------------------------------------------------------------------
     # Main orchestrator
@@ -940,13 +472,13 @@ class DubbingPipeline:
             # Step 2: Transcribe
             step = DubbingStep.TRANSCRIBE.value
             if self.state.is_step_done(step) and self.state.segments:
-                segments = self._dicts_to_segments(self.state.segments)
+                segments = _dicts_to_segments(self.state.segments)
                 logger.info("Skipping %s (cached: %d segments)", step, len(segments))
             else:
                 ts = time.time()
                 segments = self._transcribe(audio_path)
                 result.step_times[step] = time.time() - ts
-                self.state.segments = self._segments_to_dicts(segments)
+                self.state.segments = _segments_to_dicts(segments)
                 self.state.mark_step_done(step)
                 self._save_checkpoint()
 
@@ -954,7 +486,7 @@ class DubbingPipeline:
             step = DubbingStep.POST_PROCESS.value
             if self.config.post_process:
                 if self.state.is_step_done(step):
-                    segments = self._dicts_to_segments(self.state.segments)
+                    segments = _dicts_to_segments(self.state.segments)
                     logger.info("Skipping %s (cached)", step)
                 else:
                     from audiosmith.transcription_post_processor import \
@@ -963,7 +495,7 @@ class DubbingPipeline:
                     pp = TranscriptionPostProcessor()
                     segments = pp.process(segments)
                     result.step_times[step] = time.time() - ts
-                    self.state.segments = self._segments_to_dicts(segments)
+                    self.state.segments = _segments_to_dicts(segments)
                     self.state.mark_step_done(step)
                     self._save_checkpoint()
 
@@ -974,7 +506,7 @@ class DubbingPipeline:
             if self.config.diarize:
                 if self.state.is_step_done(step):
                     # Restore speaker_id from checkpoint
-                    segments = self._dicts_to_segments(self.state.segments)
+                    segments = _dicts_to_segments(self.state.segments)
                     logger.info("Skipping %s (cached)", step)
                 else:
                     from audiosmith.diarizer import Diarizer
@@ -991,7 +523,7 @@ class DubbingPipeline:
                     for seg, lbl in zip(segments, labeled):
                         seg.speaker_id = lbl.get('speaker')
                     result.step_times[step] = time.time() - ts
-                    self.state.segments = self._segments_to_dicts(segments)
+                    self.state.segments = _segments_to_dicts(segments)
                     self.state.mark_step_done(step)
                     self._save_checkpoint()
 
@@ -1007,7 +539,7 @@ class DubbingPipeline:
             step = DubbingStep.DETECT_EMOTION.value
             if self.config.detect_emotion:
                 if self.state.is_step_done(step):
-                    segments = self._dicts_to_segments(self.state.segments)
+                    segments = _dicts_to_segments(self.state.segments)
                     logger.info("Skipping %s (cached)", step)
                 else:
                     from audiosmith.emotion import EmotionEngine
@@ -1021,14 +553,14 @@ class DubbingPipeline:
                             'intensity': emo.intensity,
                         }
                     result.step_times[step] = time.time() - ts
-                    self.state.segments = self._segments_to_dicts(segments)
+                    self.state.segments = _segments_to_dicts(segments)
                     self.state.mark_step_done(step)
                     self._save_checkpoint()
 
             # Step 3: Translate (or import from external SRT)
             step = DubbingStep.TRANSLATE.value
             if self.state.is_step_done(step):
-                segments = self._dicts_to_segments(self.state.segments)
+                segments = _dicts_to_segments(self.state.segments)
                 logger.info("Skipping %s (cached)", step)
             else:
                 ts = time.time()
@@ -1055,7 +587,7 @@ class DubbingPipeline:
                 else:
                     segments = self._translate(segments)
                 result.step_times[step] = time.time() - ts
-                self.state.segments = self._segments_to_dicts(segments)
+                self.state.segments = _segments_to_dicts(segments)
                 self.state.mark_step_done(step)
                 self._save_checkpoint()
 
@@ -1063,7 +595,7 @@ class DubbingPipeline:
             step = DubbingStep.MERGE_SEGMENTS.value
             if self.config.merge_segments:
                 if self.state.is_step_done(step):
-                    segments = self._dicts_to_segments(self.state.segments)
+                    segments = _dicts_to_segments(self.state.segments)
                     logger.info("Skipping %s (cached)", step)
                 else:
                     ts = time.time()
@@ -1074,20 +606,20 @@ class DubbingPipeline:
                         "Merged %d → %d segments (combined %d)",
                         before, len(segments), before - len(segments),
                     )
-                    self.state.segments = self._segments_to_dicts(segments)
+                    self.state.segments = _segments_to_dicts(segments)
                     self.state.mark_step_done(step)
                     self._save_checkpoint()
 
             # Step 4: Generate TTS
             step = DubbingStep.GENERATE_TTS.value
             if self.state.is_step_done(step):
-                segments = self._dicts_to_segments(self.state.segments)
+                segments = _dicts_to_segments(self.state.segments)
                 logger.info("Skipping %s (cached)", step)
             else:
                 ts = time.time()
                 segments = self._generate_tts(segments)
                 result.step_times[step] = time.time() - ts
-                self.state.segments = self._segments_to_dicts(segments)
+                self.state.segments = _segments_to_dicts(segments)
                 self.state.mark_step_done(step)
                 self._save_checkpoint()
 

@@ -76,6 +76,8 @@ class PiperTTS:
             noise_w_scale=1.0,
         )
 
+        if self._model is None:
+            raise TTSError("Model not loaded")
         chunks = list(self._model.synthesize(text, syn_config=syn_config))
         audio = np.concatenate([c.audio_float_array for c in chunks])
         return audio

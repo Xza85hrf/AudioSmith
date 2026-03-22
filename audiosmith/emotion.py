@@ -205,13 +205,13 @@ class EmotionEngine:
         from transformers import pipeline as hf_pipeline
 
         if self._classifier is None:
-            self._classifier = hf_pipeline(
+            self._classifier = hf_pipeline(  # type: ignore[assignment]
                 'text-classification',
                 model='j-hartmann/emotion-english-distilroberta-base',
                 top_k=2,
             )
 
-        results = self._classifier(text)
+        results = self._classifier(text)  # type: ignore[misc]
         if not results:
             return EmotionResult(Emotion.NEUTRAL, 0.5)
 

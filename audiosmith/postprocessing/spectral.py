@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 def measure_spectral_envelope(
     wav: np.ndarray, sr: int,
-) -> Dict[str, float]:
+) -> Dict[str, float | tuple[float, ...]]:
     """Measure spectral characteristics in 9 octave bands.
 
     Returns centroid (Hz), brightness (0-1), and per-band RMS (dB).
@@ -87,12 +87,18 @@ def compute_spectral_correction(
     Returns:
         Array of 9 gain values (linear scale).
     """
-    measured_db = measured["bands_db"]
+    measured_db_raw = measured["bands_db"]
     target_db = target_profile.band_energies_db
+
+    # Ensure measured_db is a sequence of floats
+    if isinstance(measured_db_raw, (tuple, list)):
+        measured_db = list(measured_db_raw)
+    else:
+        measured_db = list(measured_db_raw)  # type: ignore[call-overload]
 
     gains = np.ones(len(target_db), dtype=np.float32)
     for i in range(len(target_db)):
-        diff_db = target_db[i] - measured_db[i]
+        diff_db = float(target_db[i]) - float(measured_db[i])
         # Blend toward target by spectral_intensity
         correction_db = diff_db * spectral_intensity
         gains[i] = 10 ** (correction_db / 20.0)
@@ -217,7 +223,7 @@ def synthesize_presence(
     # Smooth envelope
     kernel_size = min(3, n_frames)
     kernel = np.ones(kernel_size, dtype=np.float32) / kernel_size
-    envelope = np.convolve(envelope, kernel, mode="same")
+    envelope = np.convolve(envelope, kernel, mode="same")  # type: ignore[assignment]
 
     # Interpolate to sample level
     frame_centers = np.arange(n_frames) * frame_size + frame_size // 2
@@ -230,7 +236,7 @@ def synthesize_presence(
     presence = filtered * env_samples * mix_level * peak
 
     result = wav + presence
-    return result
+    return result  # type: ignore[no-any-return]
 
 
 def boost_warmth(wav: np.ndarray, sr: int, intensity: float) -> np.ndarray:

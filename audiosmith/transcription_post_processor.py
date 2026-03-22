@@ -57,7 +57,7 @@ class TranscriptionPostProcessor:
 
         result = segments
         if self.enabled_stages['hallucination_filter']:
-            result = self.stage1_hallucination_filter(result)
+            result = self.stage1_hallucination_filter(result)  # type: ignore[assignment]
         if self.enabled_stages['segment_splitter']:
             result = self.stage2_segment_splitter(result)
         if self.enabled_stages['punctuation_restorer']:
@@ -74,15 +74,17 @@ class TranscriptionPostProcessor:
 
         # Handle List[str] for standalone use
         if isinstance(input_data[0], str):
-            return [
+            str_data: List[str] = input_data  # type: ignore[assignment]
+            return [  # type: ignore[return-value]
                 re.sub(r'\s+', ' ', self.filler_regex.sub('', t)).strip()
-                for t in input_data
+                for t in str_data
                 if re.sub(r'\s+', ' ', self.filler_regex.sub('', t)).strip()
             ]
 
         # Handle List[DubbingSegment]
+        seg_data: List[DubbingSegment] = input_data  # type: ignore[assignment]
         result = []
-        for seg in input_data:
+        for seg in seg_data:
             cleaned = re.sub(r'\s+', ' ', self.filler_regex.sub('', seg.original_text)).strip()
             if not cleaned:
                 continue

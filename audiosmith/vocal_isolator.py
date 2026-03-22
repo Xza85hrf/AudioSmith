@@ -42,12 +42,12 @@ class VocalIsolator:
 
         self._apply_model = apply_model
         self._model = get_model(self.model_name)
-        self._model.to(self.device)
+        self._model.to(self.device)  # type: ignore[attr-defined]
         logger.info("Loaded Demucs model '%s' on %s", self.model_name, self.device)
 
     def _isolate_chunked(
-        self, wav: "torch.Tensor", chunk_samples: int,  # noqa: F821
-    ) -> tuple["torch.Tensor", "torch.Tensor"]:  # noqa: F821
+        self, wav: "torch.Tensor", chunk_samples: int,  # type: ignore[name-defined]  # noqa: F821
+    ) -> tuple["torch.Tensor", "torch.Tensor"]:  # type: ignore[name-defined]  # noqa: F821
         """Process audio in chunks to avoid GPU OOM on long files.
 
         Args:
@@ -57,20 +57,20 @@ class VocalIsolator:
         Returns:
             Tuple of (vocals, background) tensors [channels, time] on CPU
         """
-        import torch
+        import torch  # noqa: F401
 
         n_samples = wav.shape[1]
         n_chunks = (n_samples + chunk_samples - 1) // chunk_samples
-        vocals_idx = self._model.sources.index('vocals')
-        bg_mask = [i for i in range(len(self._model.sources)) if i != vocals_idx]
+        vocals_idx = self._model.sources.index('vocals')  # type: ignore[attr-defined]
+        bg_mask = [i for i in range(len(self._model.sources)) if i != vocals_idx]  # type: ignore[attr-defined]
 
         all_vocals: list[torch.Tensor] = []
         all_background: list[torch.Tensor] = []
 
         logger.info(
             "Processing %d samples (%.1fh) in %d chunks of %.1f min each",
-            n_samples, n_samples / self._model.samplerate / 3600,
-            n_chunks, chunk_samples / self._model.samplerate / 60,
+            n_samples, n_samples / self._model.samplerate / 3600,  # type: ignore[attr-defined]
+            n_chunks, chunk_samples / self._model.samplerate / 60,  # type: ignore[attr-defined]
         )
 
         for i in range(n_chunks):
@@ -84,7 +84,7 @@ class VocalIsolator:
             chunk_dev = chunk.unsqueeze(0).to(self.device)  # [1, 2, time]
 
             with torch.no_grad():
-                sources = self._apply_model(
+                sources = self._apply_model(  # type: ignore[misc]
                     self._model, chunk_dev, split=True, segment=7.5, overlap=0.25,
                     device=self.device,
                 )
@@ -141,12 +141,12 @@ class VocalIsolator:
             wav = wav.repeat(2, 1)
 
         # Resample to model's expected rate
-        if sr != self._model.samplerate:
-            wav = torchaudio.transforms.Resample(sr, self._model.samplerate)(wav)
+        if sr != self._model.samplerate:  # type: ignore[attr-defined]
+            wav = torchaudio.transforms.Resample(sr, self._model.samplerate)(wav)  # type: ignore[attr-defined]
 
         # Determine if chunked processing is needed
-        duration_s = wav.shape[1] / self._model.samplerate
-        chunk_samples = int(CHUNK_DURATION_S * self._model.samplerate)
+        duration_s = wav.shape[1] / self._model.samplerate  # type: ignore[attr-defined]
+        chunk_samples = int(CHUNK_DURATION_S * self._model.samplerate)  # type: ignore[attr-defined]
 
         # Use chunked processing for audio > 30 minutes to avoid OOM
         if duration_s > 1800:
@@ -159,13 +159,13 @@ class VocalIsolator:
             # Original single-pass processing for shorter audio
             wav_dev = wav.unsqueeze(0).to(self.device)
             with torch.no_grad():
-                sources = self._apply_model(
+                sources = self._apply_model(  # type: ignore[misc]
                     self._model, wav_dev, split=True, segment=7.5, overlap=0.25,
                     device=self.device,
                 )
             sources = sources.squeeze(0).cpu()
 
-            vocals_idx = self._model.sources.index('vocals')
+            vocals_idx = self._model.sources.index('vocals')  # type: ignore[attr-defined]
             vocals = sources[vocals_idx]
             bg_mask = [i for i in range(sources.shape[0]) if i != vocals_idx]
             background = sources[bg_mask].sum(dim=0)
@@ -179,8 +179,8 @@ class VocalIsolator:
         bg_mono = background.mean(dim=0, keepdim=True)
 
         target_sr = 16000
-        if self._model.samplerate != target_sr:
-            resample = torchaudio.transforms.Resample(self._model.samplerate, target_sr)
+        if self._model.samplerate != target_sr:  # type: ignore[attr-defined]
+            resample = torchaudio.transforms.Resample(self._model.samplerate, target_sr)  # type: ignore[attr-defined]
             vocals_mono = resample(vocals_mono)
             bg_mono = resample(bg_mono)
 
@@ -193,9 +193,9 @@ class VocalIsolator:
 
         # ── High-quality stereo background for mixing ──
         background_hq = background  # [2, time] at model samplerate
-        if self._model.samplerate != mixing_sample_rate:
+        if self._model.samplerate != mixing_sample_rate:  # type: ignore[attr-defined]
             background_hq = torchaudio.transforms.Resample(
-                self._model.samplerate, mixing_sample_rate,
+                self._model.samplerate, mixing_sample_rate,  # type: ignore[attr-defined]
             )(background_hq)
         bg_hq_path = output_dir / f'{stem}_background_hq.wav'
         torchaudio.save(str(bg_hq_path), background_hq, mixing_sample_rate)

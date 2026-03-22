@@ -103,7 +103,7 @@ def _load_chatterbox(**kwargs: Any) -> TTSEngine:
     """Load Chatterbox TTS engine."""
     from audiosmith.tts import ChatterboxTTS
 
-    return ChatterboxTTS(**kwargs)
+    return ChatterboxTTS(**kwargs)  # type: ignore[return-value]
 
 
 def _load_piper(**kwargs: Any) -> TTSEngine:
@@ -119,49 +119,49 @@ def _load_f5(**kwargs: Any) -> TTSEngine:
     """Load F5-TTS engine."""
     from audiosmith.f5_tts import F5TTS
 
-    return F5TTS(**kwargs)
+    return F5TTS(**kwargs)  # type: ignore[return-value]
 
 
 def _load_elevenlabs(**kwargs: Any) -> TTSEngine:
     """Load ElevenLabs TTS engine."""
     from audiosmith.elevenlabs_tts import ElevenLabsTTS
 
-    return ElevenLabsTTS(**kwargs)
+    return ElevenLabsTTS(**kwargs)  # type: ignore[return-value]
 
 
 def _load_fish(**kwargs: Any) -> TTSEngine:
     """Load Fish Speech TTS engine."""
     from audiosmith.fish_speech_tts import FishSpeechTTS
 
-    return FishSpeechTTS(**kwargs)
+    return FishSpeechTTS(**kwargs)  # type: ignore[return-value]
 
 
 def _load_qwen3(**kwargs: Any) -> TTSEngine:
     """Load Qwen3 TTS engine."""
     from audiosmith.qwen3_tts import Qwen3TTS
 
-    return Qwen3TTS(**kwargs)
+    return Qwen3TTS(**kwargs)  # type: ignore[return-value]
 
 
 def _load_cosyvoice(**kwargs: Any) -> TTSEngine:
     """Load CosyVoice2 TTS engine."""
     from audiosmith.cosyvoice_tts import CosyVoice2TTS
 
-    return CosyVoice2TTS(**kwargs)
+    return CosyVoice2TTS(**kwargs)  # type: ignore[return-value]
 
 
 def _load_orpheus(**kwargs: Any) -> TTSEngine:
     """Load Orpheus TTS engine."""
     from audiosmith.orpheus_tts import OrpheusTTS
 
-    return OrpheusTTS(**kwargs)
+    return OrpheusTTS(**kwargs)  # type: ignore[return-value]
 
 
 def _load_indextts(**kwargs: Any) -> TTSEngine:
     """Load IndexTTS-2 engine."""
     from audiosmith.indextts_tts import IndexTTS2TTS
 
-    return IndexTTS2TTS(**kwargs)
+    return IndexTTS2TTS(**kwargs)  # type: ignore[return-value]
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -185,12 +185,12 @@ class PiperAdapter:
 
     @property
     def sample_rate(self) -> int:
-        return self._engine.sample_rate
+        return self._engine.sample_rate  # type: ignore[no-any-return]
 
     def load_model(self) -> None:
         """Piper loads model lazily in synthesize(), so this is a no-op."""
         # Piper's _load_model is private and called on first synthesize
-        pass
+        pass  # type: ignore[no-any-return]
 
     def synthesize(self, text: str, **kwargs: Any) -> Tuple[np.ndarray, int]:
         """Synthesize and normalize return type to (audio, sr)."""

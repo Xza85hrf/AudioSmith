@@ -72,7 +72,7 @@ def expand_dynamic_range(
     sample_indices = np.arange(len(wav))
     gain = np.interp(sample_indices, frame_centers, gain_per_frame).astype(np.float32)
 
-    return wav * gain
+    return wav * gain  # type: ignore[no-any-return]
 
 
 def reshape_dynamic_range(
@@ -133,4 +133,4 @@ def reshape_dynamic_range(
     frame_centers = np.arange(n_frames) * frame_size + frame_size // 2
     gain = np.interp(np.arange(len(wav)), frame_centers, gain_per_frame).astype(np.float32)
 
-    return wav * gain
+    return wav * gain  # type: ignore[no-any-return]

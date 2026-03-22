@@ -93,7 +93,7 @@ class MultiVoiceTTS:
             exag = self.default_exaggeration
             cfg = self.default_cfg_weight
 
-        return self._engine.synthesize(
+        return self._engine.synthesize(  # type: ignore[union-attr]
             text,
             language=self.language,
             audio_prompt_path=prompt,

@@ -345,11 +345,12 @@ class ElevenLabsTTS:
                 files=handles,
                 description=description,
             )
-            self._cloned_voices[voice_name] = voice.voice_id
+            voice_id: str = voice.voice_id  # type: ignore[attr-defined]
+            self._cloned_voices[voice_name] = voice_id
             logger.info(
-                "Cloned voice '%s' created (id=%s)", voice_name, voice.voice_id,
+                "Cloned voice '%s' created (id=%s)", voice_name, voice_id,
             )
-            return voice.voice_id
+            return voice_id
 
         except TTSError:
             raise
@@ -422,6 +423,5 @@ class ElevenLabsTTS:
     def __enter__(self) -> "ElevenLabsTTS":
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.cleanup()
-        return False

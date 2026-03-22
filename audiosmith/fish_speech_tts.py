@@ -212,7 +212,7 @@ class FishSpeechTTS:
                 voices=[audio_bytes],
                 description=description or f"Cloned voice: {voice_name}",
             )
-            voice_id = voice.id
+            voice_id: str = voice.id  # type: ignore[attr-defined]
             self._cloned_voices[voice_name] = voice_id
             logger.info(
                 "Fish Speech voice '%s' created (id=%s)", voice_name, voice_id,
@@ -260,9 +260,8 @@ class FishSpeechTTS:
     def __enter__(self) -> "FishSpeechTTS":
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.cleanup()
-        return False
 
     def _resolve_voice(self, voice: Optional[str]) -> Optional[str]:
         """Resolve voice name to reference_id."""

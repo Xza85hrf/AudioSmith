@@ -99,7 +99,7 @@ class AudioMixer:
             ).T
 
         if len(bg_audio) >= total_samples:
-            return bg_audio[:total_samples]
+            return bg_audio[:total_samples]  # type: ignore[no-any-return]
 
         buffer = np.zeros((total_samples, 2), dtype=np.float32)
         buffer[:len(bg_audio)] = bg_audio
@@ -196,7 +196,7 @@ class AudioMixer:
         if peak > 0.01:
             buffer = buffer / peak * 0.95
 
-        return buffer
+        return buffer.astype(np.float32)
 
     def render_to_file(
         self,

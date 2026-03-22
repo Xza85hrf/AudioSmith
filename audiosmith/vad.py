@@ -74,7 +74,7 @@ class VADProcessor:
                 data = data.mean(axis=1)
             audio_tensor = torch.from_numpy(data)
 
-        timestamps = self._get_speech_ts(
+        timestamps = self._get_speech_ts(  # type: ignore[misc]
             audio_tensor, self._model,
             sampling_rate=self.sample_rate,
             min_speech_duration_ms=self.min_speech_duration_ms,

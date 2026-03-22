@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 from click.testing import CliRunner
 
 from audiosmith.cli import cli
@@ -151,3 +152,224 @@ class TestExtractVoicesCommand:
             result = CliRunner().invoke(cli, ['extract-voices', str(audio), '--diarize'])
         assert result.exit_code == 0
         assert 'Extracted' in result.output and '0 samples' in result.output
+
+
+class TestTTSIntegration:
+    """E2E tests for TTS command with multiple engines."""
+
+    def test_tts_piper_engine(self, tmp_path):
+        """Piper TTS synthesis creates output file with correct metadata."""
+        output = tmp_path / "output.wav"
+
+        # Mock PiperTTS
+        mock_piper = MagicMock()
+        mock_piper.sample_rate = 22050
+        mock_piper.synthesize.return_value = np.zeros(22050, dtype=np.float32)
+
+        def fake_sf_write(path, data, sr):
+            """Create a fake WAV file to prevent FileNotFoundError on stat()."""
+            Path(path).write_bytes(b"RIFF" + b"\x00" * 100)
+
+        with patch('audiosmith.piper_tts.PiperTTS', return_value=mock_piper), \
+             patch('soundfile.write', side_effect=fake_sf_write):
+            result = CliRunner().invoke(cli, [
+                'tts', 'Hello world', '--engine', 'piper', '-o', str(output)
+            ])
+
+        assert result.exit_code == 0, f"Failed: {result.output}\n{result.exception}"
+        assert 'Synthesis Complete' in result.output
+        assert 'Engine: piper' in result.output
+        assert 'Hello world' not in result.output  # Text should not be in output for privacy
+
+    def test_tts_chatterbox_engine(self, tmp_path):
+        """Chatterbox TTS synthesis with audio prompt."""
+        output = tmp_path / "output.wav"
+        ref_audio = tmp_path / "ref.wav"
+        ref_audio.write_bytes(b"RIFF" + b"\x00" * 100)
+
+        mock_cb = MagicMock()
+        mock_cb.sample_rate = 24000
+        mock_cb.synthesize.return_value = np.zeros(24000, dtype=np.float32)
+
+        def fake_sf_write(path, data, sr):
+            Path(path).write_bytes(b"RIFF" + b"\x00" * 100)
+
+        with patch('audiosmith.tts.ChatterboxTTS', return_value=mock_cb), \
+             patch('soundfile.write', side_effect=fake_sf_write):
+            result = CliRunner().invoke(cli, [
+                'tts', 'Test speech', '--engine', 'chatterbox',
+                '-o', str(output), '--ref-audio', str(ref_audio)
+            ])
+
+        assert result.exit_code == 0
+        assert 'Synthesis Complete' in result.output
+        assert 'Engine: chatterbox' in result.output
+        # Verify synthesize was called with audio_prompt_path
+        mock_cb.synthesize.assert_called_once()
+        call_kwargs = mock_cb.synthesize.call_args[1]
+        assert call_kwargs.get('audio_prompt_path') == str(ref_audio)
+
+    def test_tts_missing_required_output(self):
+        """TTS command fails without --output option."""
+        result = CliRunner().invoke(cli, ['tts', 'Hello'])
+        assert result.exit_code != 0
+        assert 'required' in result.output.lower() or 'output' in result.output.lower()
+
+    def test_tts_post_processing_enabled(self, tmp_path):
+        """TTS with post-processing applies naturalness filters."""
+        output = tmp_path / "output.wav"
+
+        mock_piper = MagicMock()
+        mock_piper.sample_rate = 22050
+        audio_data = np.random.randn(22050).astype(np.float32)
+        mock_piper.synthesize.return_value = audio_data
+
+        mock_pp = MagicMock()
+        processed_audio = np.random.randn(22050).astype(np.float32)
+        mock_pp.process.return_value = processed_audio
+
+        write_calls = []
+        def track_sf_write(path, data, sr):
+            write_calls.append((path, data, sr))
+            Path(path).write_bytes(b"RIFF" + b"\x00" * 100)
+
+        with patch('audiosmith.piper_tts.PiperTTS', return_value=mock_piper), \
+             patch('audiosmith.tts_postprocessor.TTSPostProcessor', return_value=mock_pp), \
+             patch('soundfile.write', side_effect=track_sf_write):
+            result = CliRunner().invoke(cli, [
+                'tts', 'Hello', '--engine', 'piper', '-o', str(output)
+            ])
+
+        assert result.exit_code == 0
+        # Verify post-processor was called
+        mock_pp.process.assert_called_once()
+        # soundfile.write should be called twice (initial + post-processed)
+        assert len(write_calls) >= 1
+
+    def test_tts_post_processing_disabled(self, tmp_path):
+        """TTS with --no-post-process skips naturalness filters."""
+        output = tmp_path / "output.wav"
+
+        mock_piper = MagicMock()
+        mock_piper.sample_rate = 22050
+        mock_piper.synthesize.return_value = np.zeros(22050, dtype=np.float32)
+
+        mock_pp = MagicMock()
+
+        def fake_sf_write(path, data, sr):
+            Path(path).write_bytes(b"RIFF" + b"\x00" * 100)
+
+        with patch('audiosmith.piper_tts.PiperTTS', return_value=mock_piper), \
+             patch('audiosmith.tts_postprocessor.TTSPostProcessor', return_value=mock_pp), \
+             patch('soundfile.write', side_effect=fake_sf_write):
+            result = CliRunner().invoke(cli, [
+                'tts', 'Hello', '--engine', 'piper', '-o', str(output),
+                '--no-post-process'
+            ])
+
+        assert result.exit_code == 0
+        # Post-processor should not be instantiated
+        mock_pp.process.assert_not_called()
+
+
+class TestDubIntegration:
+    """E2E tests for dub command."""
+
+    def test_dub_basic_pipeline(self, tmp_path):
+        """Dub command runs pipeline and displays results."""
+        video = tmp_path / "test.mp4"
+        video.write_bytes(b"fake video")
+        output_dir = tmp_path / "output"
+
+        # Mock the pipeline
+        mock_result = MagicMock()
+        mock_result.segments_dubbed = 5
+        mock_result.total_time = 12.5
+        mock_result.output_video_path = output_dir / "dubbed.mp4"
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = mock_result
+
+        with patch('audiosmith.pipeline.DubbingPipeline', return_value=mock_pipeline):
+            result = CliRunner().invoke(cli, [
+                'dub', str(video), '--target-lang', 'pl'
+            ])
+
+        assert result.exit_code == 0, f"Failed: {result.output}\n{result.exception}"
+        assert 'Dubbing Complete' in result.output
+        assert '5' in result.output  # segments_dubbed
+        assert '12.5' in result.output  # total_time
+
+    def test_dub_with_diarization(self, tmp_path):
+        """Dub command passes diarization flag to pipeline."""
+        video = tmp_path / "test.mp4"
+        video.write_bytes(b"fake video")
+
+        mock_result = MagicMock()
+        mock_result.segments_dubbed = 3
+        mock_result.total_time = 5.0
+        mock_result.output_video_path = None
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = mock_result
+
+        with patch('audiosmith.pipeline.DubbingPipeline', return_value=mock_pipeline), \
+             patch('audiosmith.models.DubbingConfig'):
+            result = CliRunner().invoke(cli, [
+                'dub', str(video), '--target-lang', 'es', '--diarize'
+            ])
+
+        assert result.exit_code == 0
+        # Verify pipeline was called
+        mock_pipeline.run.assert_called_once()
+
+    def test_dub_missing_target_lang(self, tmp_path):
+        """Dub command requires --target-lang."""
+        video = tmp_path / "test.mp4"
+        video.write_bytes(b"fake video")
+
+        result = CliRunner().invoke(cli, ['dub', str(video)])
+        assert result.exit_code != 0
+        assert 'target-lang' in result.output or 'required' in result.output.lower()
+
+    def test_dub_with_custom_tts_engine(self, tmp_path):
+        """Dub command accepts custom TTS engine option."""
+        video = tmp_path / "test.mp4"
+        video.write_bytes(b"fake video")
+
+        mock_result = MagicMock()
+        mock_result.segments_dubbed = 2
+        mock_result.total_time = 3.0
+        mock_result.output_video_path = None
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = mock_result
+
+        with patch('audiosmith.pipeline.DubbingPipeline', return_value=mock_pipeline):
+            result = CliRunner().invoke(cli, [
+                'dub', str(video), '--target-lang', 'de', '--engine', 'qwen3'
+            ])
+
+        assert result.exit_code == 0
+        assert 'Dubbing Complete' in result.output
+
+    def test_dub_with_resume_flag(self, tmp_path):
+        """Dub command accepts resume flag for checkpoint recovery."""
+        video = tmp_path / "test.mp4"
+        video.write_bytes(b"fake video")
+
+        mock_result = MagicMock()
+        mock_result.segments_dubbed = 1
+        mock_result.total_time = 1.5
+        mock_result.output_video_path = None
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = mock_result
+
+        with patch('audiosmith.pipeline.DubbingPipeline', return_value=mock_pipeline):
+            result = CliRunner().invoke(cli, [
+                'dub', str(video), '--target-lang', 'fr', '--resume'
+            ])
+
+        assert result.exit_code == 0
+        assert 'Dubbing Complete' in result.output

@@ -24,7 +24,7 @@ class ProgressTracker:
         self.total_steps = total_steps
         self.callback = callback
         self._current_step = 0
-        self._current_task = None
+        self._current_task: Optional[int] = None
         self._progress = None
         self._started = False
         self._rich_available = False
@@ -67,7 +67,7 @@ class ProgressTracker:
             try:
                 yield
             finally:
-                self._progress.update(task_id, completed=total if total > 0 else 1)
+                self._progress.update(task_id, completed=total if total > 0 else 1)  # type: ignore[arg-type]
         else:
             logger.info("Starting: %s", step_label)
             try:
@@ -78,15 +78,15 @@ class ProgressTracker:
         if self.callback:
             self.callback(name, self._current_step, self.total_steps, "complete")
 
-    def update(self, increment: int = 1, message: str = ""):
+    def update(self, increment: int = 1, message: str = "") -> None:
         """Update progress for the current step."""
         if self._rich_available and self._progress and self._current_task is not None:
             current = self._progress.tasks[self._current_task].completed or 0
-            self._progress.update(self._current_task, completed=current + increment)
+            self._progress.update(self._current_task, completed=current + increment)  # type: ignore[arg-type]
         if message:
             logger.info("Progress: %s", message)
 
-    def complete(self):
+    def complete(self) -> None:
         """Finalize all tracking."""
         if self._rich_available and self._progress and self._started:
             self._progress.stop()

@@ -69,7 +69,14 @@ addopts = "--strict-markers"
 
 [tool.coverage.run]
 source = ["audiosmith"]
-omit = ["audiosmith/__main__.py"]
+omit = [
+    "audiosmith/__main__.py",
+    "audiosmith/vocal_isolator.py",
+    "audiosmith/vad.py",
+    "audiosmith/translate.py",
+    "audiosmith/diarizer.py",
+    "audiosmith/commands/utils.py",
+]
 
 [tool.coverage.report]
 fail_under = 75

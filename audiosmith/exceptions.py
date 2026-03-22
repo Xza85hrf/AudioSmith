@@ -96,8 +96,8 @@ class BatchProcessingError(ProcessingError):
 
 # TrainingError now lives in aiml_training — re-export for backward compatibility
 try:
-    from aiml_training.exceptions import TrainingError  # noqa: F401
+    from aiml_training.exceptions import TrainingError as _TrainingError  # noqa: F401
+    TrainingError = _TrainingError
 except ImportError:
-
-    class TrainingError(AudioSmithError):
+    class TrainingError(AudioSmithError):  # type: ignore[no-redef]
         """Training operation failed."""

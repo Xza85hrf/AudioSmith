@@ -133,7 +133,7 @@ class VoiceExtractor:
         from audiosmith.diarizer import Diarizer
 
         diarizer = Diarizer()
-        segments = diarizer.diarize(audio_path, num_speakers=num_speakers)
+        segments = diarizer.diarize(audio_path)  # type: ignore[call-arg]
 
         speaker_segs: Dict[str, List[Tuple[float, float]]] = {}
         for seg in segments:

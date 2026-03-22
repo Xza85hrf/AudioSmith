@@ -230,9 +230,8 @@ class OrpheusTTS:
     def __enter__(self) -> "OrpheusTTS":
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.cleanup()
-        return False
 
     def _collect_chunks(self, output_iter: Any) -> np.ndarray:
         """Collect streaming audio chunks into a single numpy array.

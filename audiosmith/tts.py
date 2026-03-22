@@ -36,16 +36,16 @@ class ChatterboxTTS:
             perth.PerthImplicitWatermarker = perth.DummyWatermarker
         # Fix transformers 5.x: sdpa blocks output_attentions setter
         import transformers.configuration_utils as _cfg
-        _cfg.PretrainedConfig.output_attentions = property(
-            _cfg.PretrainedConfig.output_attentions.fget,
+        _cfg.PretrainedConfig.output_attentions = property(  # type: ignore[method-assign, assignment, attr-defined]
+            _cfg.PretrainedConfig.output_attentions.fget,  # type: ignore[attr-defined]
             lambda self, v: object.__setattr__(self, '_output_attentions', v),
         )
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
         self._model = ChatterboxMultilingualTTS.from_pretrained(device=self._device)
         # Switch LLM layers from sdpa to eager so attention tensors are returned
-        tfmr = self._model.t3.tfmr
-        tfmr.config._attn_implementation = 'eager'
-        for layer in tfmr.layers:
+        tfmr = self._model.t3.tfmr  # type: ignore[attr-defined]
+        tfmr.config._attn_implementation = 'eager'  # type: ignore[attr-defined]
+        for layer in tfmr.layers:  # type: ignore[attr-defined]
             if hasattr(layer, 'self_attn'):
                 layer.self_attn.config._attn_implementation = 'eager'
         logger.info("Chatterbox multilingual model loaded on %s", self._device)
@@ -63,14 +63,14 @@ class ChatterboxTTS:
             raise ValueError(
                 f"Unsupported language '{language}'. Supported: {sorted(LANGUAGE_MAP.keys())}"
             )
-        wav = self._model.generate(
+        wav = self._model.generate(  # type: ignore[no-any-return, attr-defined]
             text,
             language_id=LANGUAGE_MAP[language],
             audio_prompt_path=audio_prompt_path,
             exaggeration=exaggeration,
             cfg_weight=cfg_weight,
         )
-        return wav.squeeze().cpu().numpy()
+        return wav.squeeze().cpu().numpy()  # type: ignore[no-any-return]
 
     @property
     def sample_rate(self) -> int:

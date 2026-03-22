@@ -309,11 +309,11 @@ class Qwen3TTS:
 
         model = self._base_model
         if ref_text:
-            profile.voice_clone_prompt = model.create_voice_clone_prompt(
+            profile.voice_clone_prompt = model.create_voice_clone_prompt(  # type: ignore[attr-defined]
                 ref_audio=ref_audio, ref_text=ref_text,
             )
         else:
-            profile.voice_clone_prompt = model.create_voice_clone_prompt(
+            profile.voice_clone_prompt = model.create_voice_clone_prompt(  # type: ignore[attr-defined]
                 ref_audio=ref_audio, x_vector_only_mode=True,
             )
 
@@ -341,14 +341,14 @@ class Qwen3TTS:
 
         if sample_text:
             model = self._design_model
-            wavs, sr = model.generate_voice_design(
+            wavs, sr = model.generate_voice_design(  # type: ignore[attr-defined]
                 text=sample_text, instruct=instruct,
                 language=_normalize_language(language),
             )
             profile.ref_audio_path = None
             profile.ref_text = sample_text
             self._ensure_model("base")
-            profile.voice_clone_prompt = self._base_model.create_voice_clone_prompt(
+            profile.voice_clone_prompt = self._base_model.create_voice_clone_prompt(  # type: ignore[attr-defined]
                 ref_audio=(wavs[0], sr), ref_text=sample_text,
             )
 
@@ -400,12 +400,12 @@ class Qwen3TTS:
         languages = [lang] * len(texts)
 
         if profile.voice_clone_prompt:
-            wavs, sr = model.generate_voice_clone(
+            wavs, sr = model.generate_voice_clone(  # type: ignore[attr-defined]
                 text=texts, language=languages,
                 voice_clone_prompt=profile.voice_clone_prompt,
             )
         elif profile.ref_audio_path:
-            wavs, sr = model.generate_voice_clone(
+            wavs, sr = model.generate_voice_clone(  # type: ignore[attr-defined]
                 text=texts, language=languages,
                 ref_audio=profile.ref_audio_path,
                 ref_text=profile.ref_text,
@@ -444,7 +444,7 @@ class Qwen3TTS:
         if instruct:
             kwargs["instruct"] = instruct
 
-        wavs, sr = model.generate_custom_voice(**kwargs)
+        wavs, sr = model.generate_custom_voice(**kwargs)  # type: ignore[attr-defined]
 
         if not isinstance(wavs, list):
             wavs = [wavs]

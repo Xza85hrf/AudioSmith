@@ -22,7 +22,7 @@ from audiosmith.language_data import get_language
 logger = logging.getLogger("audiosmith.prosody")
 
 
-def _find_vowel_clusters(word: str, vowels: set[str]) -> List[Tuple[int, int]]:
+def _find_vowel_clusters(word: str, vowels: set[str] | frozenset[str]) -> List[Tuple[int, int]]:
     """Find start/end indices of vowel clusters (syllable nuclei) in a word.
 
     Args:
