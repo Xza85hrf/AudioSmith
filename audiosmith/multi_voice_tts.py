@@ -103,8 +103,14 @@ class MultiVoiceTTS:
 
     @property
     def sample_rate(self) -> int:
-        """Return engine sample rate, or 24000 if engine not loaded."""
-        return self._engine.sample_rate if self._engine else 24000
+        """Return engine sample rate.
+
+        Raises:
+            RuntimeError: If engine is not loaded.
+        """
+        if self._engine is None:
+            raise RuntimeError("Engine not loaded. Call load_model() first.")
+        return self._engine.sample_rate
 
     @property
     def voice_count(self) -> int:
