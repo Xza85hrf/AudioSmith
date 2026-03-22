@@ -68,3 +68,11 @@ test-files/
 # Session handoffs (auto-generated)
 docs/session-handoffs/
 docs/project-state.md
+
+# ML artifacts (training data, checkpoints, runs)
+data/
+f5_checkpoints/
+runs/
+
+# Ruff cache
+.ruff_cache/
