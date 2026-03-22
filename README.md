@@ -11,7 +11,7 @@ A CLI-first toolkit for high-quality audio and video dubbing, transcription, tra
 - **Standalone transcription**: Faster-Whisper with output in SRT, VTT, TXT, or JSON
 - **URL transcription**: Direct transcription of YouTube and other platforms via yt-dlp
 - **Subtitle translation**: Offline via Argos or GPU-accelerated via TranslateGemma
-- **4 TTS engines**: Chatterbox (23-lang voice cloning), Qwen3 (premium/cloned/designed voices), Piper (lightweight ONNX), MultiVoice (speaker-aware)
+- **9 TTS engines**: Chatterbox (23-lang voice cloning), Qwen3 (premium/cloned/designed voices), Piper (lightweight ONNX), F5 (flow matching), ElevenLabs (cloud, 70+ languages), Fish Speech (cloud), IndexTTS (emotion-aware), CosyVoice2 (5.53 MOS), Orpheus (13-lang expressive)
 - **Voice extraction**: Extract and catalog voice samples from audio with optional speaker diarization
 - **Speaker diarization**: Identify and label individual speakers (PyAnnote Audio)
 - **Emotion detection**: Rule-based + optional ML emotion analysis for expressive TTS
@@ -55,7 +55,7 @@ pip install -e ".[all]"       # Everything above
 | `transcribe` | Transcribe audio/video to SRT/VTT/TXT/JSON |
 | `transcribe-url` | Download and transcribe from YouTube/supported URLs |
 | `translate` | Translate subtitle files (Argos or TranslateGemma) |
-| `tts` | Text-to-speech synthesis (Chatterbox, Qwen3, or Piper) |
+| `tts` | Text-to-speech synthesis (9 engines: Chatterbox, Qwen3, Piper, F5, ElevenLabs, Fish Speech, IndexTTS, CosyVoice2, Orpheus) |
 | `batch` | Process multiple files in one run |
 | `export` | Convert SRT to TXT, PDF, or DOCX |
 | `normalize` | Analyze and normalize audio loudness (LUFS) |
@@ -63,6 +63,8 @@ pip install -e ".[all]"       # Everything above
 | `check` | System pre-flight checks (FFmpeg, CUDA, disk space) |
 | `info` | Show system info, available engines, and capabilities |
 | `voices` | Browse available voices across all TTS engines |
+| `train-data-gen` | Generate training data for F5-TTS fine-tuning (paired text+audio) |
+| `train-f5` | Fine-tune F5-TTS for custom voices |
 
 ## Quick Start
 
@@ -116,8 +118,13 @@ audiosmith info
 |--------|--------|-----------|----------|
 | **Chatterbox** | Zero-shot cloning | 23 languages | Voice cloning from audio prompt, emotion modulation |
 | **Qwen3** | 9 premium + cloning + design | 10 languages | Premium named voices, voice cloning (ICL/x-vector), voice design from text description |
-| **Piper** | Pre-trained ONNX models | English, Polish | Lightweight, fast, CPU-friendly |
-| **MultiVoice** | Speaker-aware | Per-speaker | Auto-assigns distinct voices per speaker ID |
+| **Piper** | Pre-trained ONNX models | English, Polish | Lightweight, fast, CPU-friendly, local |
+| **F5-TTS** | Zero-shot cloning | Multi-language | Flow matching, fast inference, voice cloning |
+| **ElevenLabs** | 70+ preset + cloning | 70+ languages | Cloud-based, high quality, voice cloning (premium) |
+| **Fish Speech** | Zero-shot cloning | Multi-language | Cloud-based, fast, high naturalness |
+| **IndexTTS-2** | Cloning + emotion | EN, ZH | Emotion disentanglement, controllable emotion synthesis |
+| **CosyVoice2** | Cloning + instruct | 9 languages | MOS 5.53, zero-shot cloning, instruction control |
+| **Orpheus** | 8 preset voices | 13 languages | Emotion tags, expressive synthesis, fast |
 
 ## Pipeline Architecture
 
@@ -138,7 +145,7 @@ See [docs/quality-features.md](docs/quality-features.md) for detailed documentat
 
 ```
 audiosmith/
-├── cli.py                      # Rich CLI (12 commands)
+├── cli.py                      # Rich CLI (14 commands)
 ├── pipeline.py                 # 10-step dubbing orchestrator with checkpoint/resume
 ├── transcribe.py               # Faster-Whisper transcription
 ├── translate.py                # Argos + TranslateGemma translation
