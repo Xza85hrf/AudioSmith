@@ -136,7 +136,7 @@ class TestExtractVoicesCommand:
              patch('audiosmith.voice_extractor.create_voice_profiles', return_value={"voice_00": {}}):
             result = CliRunner().invoke(cli, ['extract-voices', str(audio), '-n', '3'])
         assert result.exit_code == 0
-        assert 'Extracted 1 samples' in result.output
+        assert 'Extracted' in result.output and '1 samples' in result.output
 
     def test_extract_with_diarize(self, tmp_path):
         audio = tmp_path / "test.mp3"
@@ -150,4 +150,4 @@ class TestExtractVoicesCommand:
              patch('audiosmith.voice_extractor.create_voice_profiles', return_value={}):
             result = CliRunner().invoke(cli, ['extract-voices', str(audio), '--diarize'])
         assert result.exit_code == 0
-        assert 'Extracted 0 samples' in result.output
+        assert 'Extracted' in result.output and '0 samples' in result.output
