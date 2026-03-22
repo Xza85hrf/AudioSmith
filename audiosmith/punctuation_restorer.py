@@ -1,5 +1,7 @@
 """Punctuation restoration for transcribed text — adds missing periods, question marks, capitalization."""
 
+from __future__ import annotations
+
 import re
 from typing import List
 
@@ -14,6 +16,9 @@ QUESTION_STARTERS = {
 
 class PunctuationRestorer:
     """Restore punctuation and capitalization to raw transcribed text."""
+
+    def __init__(self) -> None:
+        pass
 
     def restore(self, text: str) -> str:
         if not text or not text.strip():

@@ -1,5 +1,7 @@
 """Retry decorator with exponential backoff and error classification."""
 
+from __future__ import annotations
+
 import logging
 import random
 import time

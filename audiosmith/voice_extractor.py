@@ -1,5 +1,7 @@
 """Voice extraction pipeline — extract, catalog, and manage voice samples for TTS cloning."""
 
+from __future__ import annotations
+
 import json
 import logging
 import subprocess

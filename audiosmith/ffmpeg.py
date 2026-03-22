@@ -1,5 +1,7 @@
 """FFmpeg-based audio extraction, duration probing, and video encoding."""
 
+from __future__ import annotations
+
 import logging
 import shutil
 import subprocess

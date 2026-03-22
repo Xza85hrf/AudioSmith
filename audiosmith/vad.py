@@ -1,5 +1,7 @@
 """Voice Activity Detection using Silero VAD model."""
 
+from __future__ import annotations
+
 import gc
 import logging
 from dataclasses import dataclass

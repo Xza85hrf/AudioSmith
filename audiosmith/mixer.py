@@ -1,5 +1,7 @@
 """Sequential audio scheduling, drift correction, and buffer rendering for dubbing."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import List, Optional
@@ -14,7 +16,7 @@ logger = logging.getLogger(__name__)
 class AudioMixer:
     """Schedules TTS segments sequentially with drift correction, then renders to a numpy buffer."""
 
-    def __init__(self, config: DubbingConfig, background_path: Optional[Path] = None):
+    def __init__(self, config: DubbingConfig, background_path: Optional[Path] = None) -> None:
         self.min_gap_ms = config.min_gap_ms
         self.max_speedup = config.max_speedup
         self.silence_reset_gap = config.silence_reset_gap

@@ -5,6 +5,8 @@ Polish speech recognition (Whisper) phonetically transcribes English tech words 
 e.g. "Docker" → "dokier", "JavaScript" → "dżawaskrypt". These patterns fix that.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from typing import List, Tuple

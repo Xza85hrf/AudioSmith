@@ -1,5 +1,7 @@
 """Emotion detection from text for TTS enhancement — rule-based with optional ML fallback."""
 
+from __future__ import annotations
+
 import logging
 import re
 from dataclasses import dataclass

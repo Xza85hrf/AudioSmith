@@ -1,5 +1,7 @@
 """Transcription post-processor — 4-stage chain: hallucination filter, splitter, punctuation, labeler."""
 
+from __future__ import annotations
+
 import logging
 import re
 from typing import List, Union
