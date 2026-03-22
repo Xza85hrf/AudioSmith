@@ -1,5 +1,7 @@
 """Input validation and normalization — pre-flight checks for files and parameters."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import Optional
@@ -57,7 +59,7 @@ class InputHandler:
             raise ValidationError(f"Unsupported language code: {language}")
         return True
 
-    def normalize_path(self, path) -> Path:
+    def normalize_path(self, path: Path | str) -> Path:
         return Path(path).resolve()
 
     def validate_all(

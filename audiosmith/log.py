@@ -1,9 +1,12 @@
 """Minimal logging setup for AudioSmith — stdlib only."""
 
+from __future__ import annotations
+
 import logging
+from typing import Optional
 
 
-def setup_logging(level='INFO', log_file=None):
+def setup_logging(level: str = 'INFO', log_file: Optional[str] = None) -> logging.Logger:
     """Configure the 'audiosmith' root logger with console and optional file output."""
     logger = logging.getLogger('audiosmith')
     if not logger.handlers:
@@ -19,6 +22,6 @@ def setup_logging(level='INFO', log_file=None):
     return logger
 
 
-def get_logger(name):
+def get_logger(name: str) -> logging.Logger:
     """Return a child logger under the 'audiosmith' namespace."""
     return logging.getLogger(f'audiosmith.{name}')

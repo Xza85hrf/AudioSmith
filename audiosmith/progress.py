@@ -1,9 +1,11 @@
 """Progress tracking with rich fallback to logging."""
 
+from __future__ import annotations
+
 import logging
 import sys
 from contextlib import contextmanager
-from typing import Callable, Optional
+from typing import Callable, Generator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,7 @@ class ProgressTracker:
         total_steps: int = 6,
         use_rich: Optional[bool] = None,
         callback: Optional[ProgressCallback] = None,
-    ):
+    ) -> None:
         self.total_steps = total_steps
         self.callback = callback
         self._current_step = 0
@@ -51,7 +53,7 @@ class ProgressTracker:
         return sys.stdout.isatty()
 
     @contextmanager
-    def step(self, name: str, total: int = 0):
+    def step(self, name: str, total: int = 0) -> Generator[None, None, None]:
         """Context manager for tracking a pipeline step."""
         self._current_step += 1
         step_label = f"[{self._current_step}/{self.total_steps}] {name}"

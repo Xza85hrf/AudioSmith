@@ -1,5 +1,7 @@
 """Faster-Whisper transcriber — single class, no manager stack."""
 
+from __future__ import annotations
+
 import gc
 import logging
 import time
@@ -29,15 +31,15 @@ class Transcriber:
         device_index: int = 0,
         batch_size: int = 16,
         vad_filter: bool = True,
-    ):
+    ) -> None:
         self.model = model
         self.compute_type = compute_type
         self.device = device
         self.device_index = device_index
         self.batch_size = batch_size
         self.vad_filter = vad_filter
-        self._model = None
-        self._batched = None
+        self._model: Optional[Any] = None
+        self._batched: Optional[Any] = None
 
     def load_model(self) -> None:
         """Load the Faster-Whisper model with BatchedInferencePipeline."""

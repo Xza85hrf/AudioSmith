@@ -1,5 +1,7 @@
 """Pre-flight system validation — checks FFmpeg, GPU, disk space, dependencies."""
 
+from __future__ import annotations
+
 import logging
 import shutil
 from typing import Dict

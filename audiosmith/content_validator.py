@@ -1,8 +1,10 @@
 """Content validation — validates transcription segments before formatting/processing."""
 
+from __future__ import annotations
+
 import logging
 import re
-from typing import List
+from typing import List, Optional
 
 from audiosmith.exceptions import ValidationError
 from audiosmith.models import DubbingSegment
@@ -36,8 +38,8 @@ class ContentValidator:
     def validate_segment(
         self,
         segment: DubbingSegment,
-        min_duration: float = None,
-        max_duration: float = None,
+        min_duration: Optional[float] = None,
+        max_duration: Optional[float] = None,
     ) -> bool:
         min_dur = min_duration if min_duration is not None else self.min_segment_duration
         max_dur = max_duration if max_duration is not None else self.max_segment_duration
@@ -71,7 +73,7 @@ class ContentValidator:
                 logger.warning("Skipping invalid segment %d: %s", seg.index, e.message)
         return valid
 
-    def validate_text_length(self, text: str, min_length: int = None, max_length: int = None) -> bool:
+    def validate_text_length(self, text: str, min_length: Optional[int] = None, max_length: Optional[int] = None) -> bool:
         min_len = min_length if min_length is not None else self.min_text_length
         max_len = max_length if max_length is not None else self.max_text_length
 

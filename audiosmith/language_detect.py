@@ -1,5 +1,7 @@
 """Language detection using character-set heuristics and word-frequency scoring."""
 
+from __future__ import annotations
+
 import logging
 import re
 from typing import Set, Tuple

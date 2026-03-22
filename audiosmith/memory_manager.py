@@ -1,9 +1,11 @@
 """Memory monitoring and cleanup utilities."""
 
+from __future__ import annotations
+
 import gc
 import logging
 from contextlib import contextmanager
-from typing import Dict, Optional
+from typing import Dict, Generator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +61,7 @@ class MemoryManager:
         logger.info("Memory cleanup completed")
 
     @contextmanager
-    def tracking_context(self):
+    def tracking_context(self) -> Generator[None, None, None]:
         """Track peak RSS memory during a block."""
         try:
             yield

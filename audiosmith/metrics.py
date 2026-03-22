@@ -1,9 +1,11 @@
 """Metrics collection for pipeline performance monitoring."""
 
+from __future__ import annotations
+
 import logging
 import time
 from contextlib import contextmanager
-from typing import Any, Dict
+from typing import Any, Dict, Generator
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,7 @@ class MetricsCollector:
         self.peak_memory_gb: float = 0.0
 
     @contextmanager
-    def timer(self, name: str):
+    def timer(self, name: str) -> Generator[None, None, None]:
         """Context manager to time a named operation."""
         start = time.perf_counter()
         try:

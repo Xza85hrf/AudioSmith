@@ -1,5 +1,7 @@
 """Speaker diarization using pyannote.audio — lean port for AudioSmith."""
 
+from __future__ import annotations
+
 import gc
 import logging
 import os
