@@ -139,6 +139,11 @@ class ElevenLabsTTS:
             self.voice_id = VOICE_MAP["Rachel"]
 
     @property
+    def name(self) -> str:
+        """Engine identifier."""
+        return 'elevenlabs'
+
+    @property
     def sample_rate(self) -> int:
         """Sample rate derived from output format."""
         rates = {
@@ -149,6 +154,10 @@ class ElevenLabsTTS:
             "mp3_44100_128": 44100,
         }
         return rates.get(self.output_format, 24000)
+
+    def load_model(self) -> None:
+        """Initialize the ElevenLabs client (lazy)."""
+        self._ensure_client()
 
     def _ensure_client(self) -> None:
         """Initialize the ElevenLabs client (lazy, checks API key)."""

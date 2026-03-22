@@ -87,9 +87,18 @@ class FishSpeechTTS:
         self.initialized = False
 
     @property
+    def name(self) -> str:
+        """Engine identifier."""
+        return 'fish'
+
+    @property
     def sample_rate(self) -> int:
         """Fish Speech outputs at 44.1kHz."""
         return 44100
+
+    def load_model(self) -> None:
+        """Initialize the Fish Audio client (lazy)."""
+        self._ensure_client()
 
     def _ensure_client(self) -> None:
         """Initialize the Fish Audio client (lazy, checks API key)."""

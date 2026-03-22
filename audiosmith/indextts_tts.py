@@ -80,8 +80,17 @@ class IndexTTS2TTS:
         self.initialized = False
 
     @property
+    def name(self) -> str:
+        """Engine identifier."""
+        return 'indextts'
+
+    @property
     def sample_rate(self) -> int:
         return self._sample_rate
+
+    def load_model(self) -> None:
+        """Load model from checkpoints directory (lazy)."""
+        self._ensure_model()
 
     def _ensure_model(self) -> None:
         """Load model from checkpoints directory (lazy)."""

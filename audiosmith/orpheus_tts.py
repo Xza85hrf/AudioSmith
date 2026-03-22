@@ -83,9 +83,18 @@ class OrpheusTTS:
         self.initialized = False
 
     @property
+    def name(self) -> str:
+        """Engine identifier."""
+        return 'orpheus'
+
+    @property
     def sample_rate(self) -> int:
         """Orpheus outputs at 24000 Hz."""
         return 24000
+
+    def load_model(self) -> None:
+        """Load the Orpheus model (lazy)."""
+        self._ensure_model()
 
     def _ensure_model(self) -> None:
         """Load the Orpheus model (lazy)."""

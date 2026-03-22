@@ -24,6 +24,11 @@ class ChatterboxTTS:
         self._device = device
         self._model = None
 
+    @property
+    def name(self) -> str:
+        """Engine identifier."""
+        return 'chatterbox'
+
     def load_model(self) -> None:
         """Load the Chatterbox multilingual model."""
         import perth
@@ -70,6 +75,9 @@ class ChatterboxTTS:
     @property
     def sample_rate(self) -> int:
         """Return the model's native sample rate."""
+        if self._model is None:
+            # Default Chatterbox sample rate (24kHz)
+            return 24000
         return self._model.sr
 
     def cleanup(self) -> None:
