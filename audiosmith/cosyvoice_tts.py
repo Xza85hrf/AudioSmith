@@ -73,9 +73,18 @@ class CosyVoice2TTS:
         self.initialized = False
 
     @property
+    def name(self) -> str:
+        """Engine identifier."""
+        return 'cosyvoice'
+
+    @property
     def sample_rate(self) -> int:
         """CosyVoice2 outputs at 22050 Hz."""
         return 22050
+
+    def load_model(self) -> None:
+        """Load the CosyVoice2 model (lazy)."""
+        self._ensure_model()
 
     def _ensure_model(self) -> None:
         """Load the CosyVoice2 model (lazy)."""
