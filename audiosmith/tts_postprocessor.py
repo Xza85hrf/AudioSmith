@@ -24,24 +24,10 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 
+from audiosmith.emotion_config import (EMOTION_INTENSITY, EMOTION_SPECTRAL_INTENSITY)
 from audiosmith.exceptions import TTSError
 
 logger = logging.getLogger("audiosmith.tts_postprocessor")
-
-# Emotion → processing intensity multiplier
-_EMOTION_INTENSITY: Dict[str, float] = {
-    "angry": 1.2,
-    "excited": 1.0,
-    "happy": 1.0,
-    "determined": 0.9,
-    "surprised": 0.8,
-    "neutral": 0.7,
-    "sarcastic": 0.7,
-    "fearful": 0.6,
-    "sad": 0.5,
-    "tender": 0.3,
-    "whisper": 0.1,
-}
 
 # Punctuation → silence duration in ms (min, max)
 # Calibrated to match ElevenLabs eleven_v3 measured pauses
@@ -58,25 +44,6 @@ _PAUSE_DURATIONS: Dict[str, tuple] = {
 
 # Regex to split text at punctuation boundaries while keeping the delimiter
 _PUNCT_SPLIT = re.compile(r"(?<=[.!?;:,\-—])\s+")
-
-# Per-emotion spectral intensity overrides.
-# Emotions with large centroid gaps need stronger correction.
-# Per-emotion spectral intensity overrides.
-# Calibrated against 12kHz-capped centroid measurements:
-#   angry: raw 2569Hz vs target 2631Hz (-2.4%) — barely needs correction
-#   excited: raw 3106Hz vs target 2416Hz (+28.6%) — needs darkening
-#   neutral: raw 2665Hz vs target 2373Hz (+12.3%) — needs moderate darkening
-#   sad: raw 3179Hz vs target 2579Hz (+23.3%) — needs darkening
-#   whisper: raw 2682Hz vs target 2819Hz (-4.8%) — barely needs correction
-_EMOTION_SPECTRAL_INTENSITY: Dict[str, float] = {
-    "angry": 0.3,     # raw already close to target
-    "whisper": 0.3,   # raw already close to target
-    "sad": 0.6,       # +23% bright, moderate correction to darken
-    "neutral": 0.4,   # +12% bright, light correction to darken
-    "excited": 0.95,  # +29% bright, aggressive correction to darken
-    "happy": 0.4,
-    "fearful": 0.5,
-}
 
 
 @dataclass
@@ -163,7 +130,7 @@ class TTSPostProcessor:
                 measured = _measure_spectral_envelope(wav, sample_rate)
                 # Use per-emotion spectral intensity if available
                 emotion_name = emotion.get("primary", "neutral") if emotion else "neutral"
-                spec_intensity = _EMOTION_SPECTRAL_INTENSITY.get(
+                spec_intensity = EMOTION_SPECTRAL_INTENSITY.get(
                     emotion_name, self.config.spectral_intensity,
                 )
                 # Cap per-emotion intensity for non-English languages
@@ -350,7 +317,7 @@ class TTSPostProcessor:
             return base
 
         primary = emotion.get("primary", "neutral")
-        emotion_mult = _EMOTION_INTENSITY.get(primary, 0.7)
+        emotion_mult = EMOTION_INTENSITY.get(primary, 0.7)
         emotion_intensity = emotion.get("intensity", 1.0)
 
         return base * emotion_mult * emotion_intensity
