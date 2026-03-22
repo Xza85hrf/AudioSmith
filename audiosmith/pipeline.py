@@ -357,6 +357,7 @@ class DubbingPipeline:
 
     def _generate_tts(self, segments: List[DubbingSegment]) -> List[DubbingSegment]:
         import soundfile as sf
+        from audiosmith.tts_protocol import get_engine
 
         tts_dir = Path(self.config.output_dir) / 'tts_segments'
         tts_dir.mkdir(parents=True, exist_ok=True)
@@ -366,24 +367,14 @@ class DubbingPipeline:
             tts_engine_name = self._resolve_engine()
         prompt = str(self.config.audio_prompt_path) if self.config.audio_prompt_path else None
 
-        if tts_engine_name == 'elevenlabs':
-            engine, sample_rate = self._init_elevenlabs_engine()
-        elif tts_engine_name == 'qwen3':
-            engine, sample_rate = self._init_qwen3_engine()
-        elif tts_engine_name == 'fish':
-            engine, sample_rate = self._init_fish_engine()
-        elif tts_engine_name == 'indextts':
-            engine, sample_rate = self._init_indextts_engine()
-        elif tts_engine_name == 'cosyvoice':
-            engine, sample_rate = self._init_cosyvoice_engine()
-        elif tts_engine_name == 'orpheus':
-            engine, sample_rate = self._init_orpheus_engine()
-        elif tts_engine_name == 'f5':
-            engine, sample_rate = self._init_f5_engine()
-        elif tts_engine_name == 'piper':
-            engine, sample_rate = self._init_piper_engine()
-        else:
+        # Determine if this is Chatterbox with multi-voice features
+        use_multi = False
+        if tts_engine_name == 'chatterbox':
             engine, sample_rate, use_multi = self._init_chatterbox_engine(segments)
+        else:
+            # Use factory for all other engines
+            engine = self._create_engine_with_factory(tts_engine_name)
+            sample_rate = engine.sample_rate
 
         for seg in segments:
             text = seg.translated_text or seg.original_text
@@ -403,99 +394,31 @@ class DubbingPipeline:
             text = self._dedup_repeated_words(text)
 
             try:
-                if tts_engine_name == 'elevenlabs':
-                    # Get emotion-based style for ElevenLabs
-                    style = None
-                    emo_data = seg.metadata.get('emotion')
-                    if emo_data:
-                        style = EMOTION_STYLE_MAP.get(emo_data.get('primary', 'neutral'), 0.0)
-                    audio, sr = engine.synthesize(text, style=style)
-                    wav = audio
-                    sample_rate = sr
-                elif tts_engine_name == 'qwen3':
-                    voice = 'clone' if prompt else 'Ryan'
-                    audio, sr = engine.synthesize(text, voice=voice)
-                    wav = audio
-                    sample_rate = sr
-                elif tts_engine_name == 'fish':
-                    voice = 'clone' if prompt else None
-                    emotion_name = None
-                    emo_data = seg.metadata.get('emotion')
-                    if emo_data:
-                        emotion_name = emo_data.get('primary')
-                    audio, sr = engine.synthesize(
-                        text, voice=voice, language=self.config.target_language,
-                        emotion=emotion_name,
-                    )
-                    wav = audio
-                    sample_rate = sr
-                elif tts_engine_name == 'indextts':
-                    voice = 'clone' if prompt else None
-                    emotion_prompt = self.config.indextts_emotion_prompt
-                    target_dur = seg.duration_ms if seg.duration_ms > 0 else None
-                    audio, sr = engine.synthesize(
-                        text, voice=voice, language=self.config.target_language,
-                        emotion_prompt=emotion_prompt,
-                        target_duration_ms=target_dur,
-                    )
-                    wav = audio
-                    sample_rate = sr
-                elif tts_engine_name == 'cosyvoice':
-                    voice = 'clone' if prompt else None
-                    audio, sr = engine.synthesize(
-                        text, voice=voice, language=self.config.target_language,
-                        instruct=self.config.cosyvoice_instruct,
-                    )
-                    wav = audio
-                    sample_rate = sr
-                elif tts_engine_name == 'orpheus':
-                    voice = 'clone' if prompt else self.config.orpheus_voice
-                    emotion_name = None
-                    emo_data = seg.metadata.get('emotion')
-                    if emo_data:
-                        emotion_name = emo_data.get('primary')
-                    audio, sr = engine.synthesize(
-                        text, voice=voice, language=self.config.target_language,
-                        emotion=emotion_name,
-                    )
-                    wav = audio
-                    sample_rate = sr
-                elif tts_engine_name == 'f5':
-                    voice = 'clone' if prompt else None
-                    audio, sr = engine.synthesize(
-                        text, voice=voice, language=self.config.target_language,
-                        speed=self.config.f5_speed,
-                    )
-                    wav = audio
-                    sample_rate = sr
-                elif tts_engine_name == 'piper':
-                    # Calculate length_scale to fit window without post-hoc time_stretch
-                    window_ms = int((seg.end_time - seg.start_time) * 1000)
-                    wav = engine.synthesize(text)
-                    first_dur_ms = int(len(wav) / sample_rate * 1000)
+                # Build engine-specific kwargs
+                synth_kwargs = self._build_synthesis_kwargs(
+                    tts_engine_name, seg, prompt, use_multi, sample_rate
+                )
+
+                # Piper needs special handling for length_scale
+                if tts_engine_name == 'piper':
+                    window_ms = synth_kwargs.pop('_window_ms', 0)
+                    audio, sr = engine.synthesize(text, **synth_kwargs)
+                    first_dur_ms = int(len(audio) / sample_rate * 1000)
                     if first_dur_ms > window_ms and window_ms > 0:
                         ls = max(window_ms / first_dur_ms, 0.5)
                         logger.debug(
                             "Seg %d: %dms TTS > %dms window, re-gen with length_scale=%.2f",
                             seg.index, first_dur_ms, window_ms, ls,
                         )
-                        wav = engine.synthesize(text, length_scale=ls)
-                else:  # chatterbox
-                    if use_multi:
-                        emotion_params = None
-                        emo_data = seg.metadata.get('emotion')
-                        if emo_data:
-                            emotion_params = _emotion_to_tts_params(
-                                emo_data['primary'], emo_data.get('intensity', 0.5),
-                            )
-                        wav = engine.synthesize(text, speaker_id=seg.speaker_id, emotion_params=emotion_params)
-                    else:
-                        wav = engine.synthesize(
-                            text, language=self.config.target_language,
-                            audio_prompt_path=prompt,
-                            exaggeration=self.config.chatterbox_exaggeration,
-                            cfg_weight=self.config.chatterbox_cfg_weight,
-                        )
+                        audio, sr = engine.synthesize(text, length_scale=ls, **{k: v for k, v in synth_kwargs.items() if k != 'language'})
+                    wav = audio
+                    sample_rate = sr
+                else:
+                    # All other engines: synthesize normally (return tuple via protocol)
+                    audio, sr = engine.synthesize(text, **synth_kwargs)
+                    wav = audio
+                    sample_rate = sr
+
             except Exception as e:
                 logger.warning("TTS failed for segment %d, skipping: %s", seg.index, e)
                 continue
@@ -676,6 +599,104 @@ class DubbingPipeline:
         if self.config.audio_prompt_path:
             engine.create_voice_clone('clone', ref_audio=self.config.audio_prompt_path)
         return engine, engine.sample_rate
+
+    def _create_engine_with_factory(self, engine_name: str):
+        """Create an engine instance with the factory, handling voice cloning."""
+        from audiosmith.tts_protocol import get_engine
+
+        engine = get_engine(engine_name)
+
+        # Handle voice cloning for engines that support it
+        if self.config.audio_prompt_path:
+            if engine_name == 'qwen3':
+                engine.load_model('base')
+                engine.create_voice_clone(
+                    voice_name='clone',
+                    ref_audio=str(self.config.audio_prompt_path),
+                )
+            elif engine_name == 'f5':
+                engine.clone_voice(
+                    'clone',
+                    audio_path_or_array=str(self.config.audio_prompt_path),
+                    ref_text=self.config.f5_ref_text,
+                )
+            elif engine_name in ('fish', 'indextts', 'cosyvoice', 'orpheus'):
+                engine.create_voice_clone('clone', ref_audio=self.config.audio_prompt_path)
+            elif engine_name == 'elevenlabs':
+                engine.create_voice_clone(
+                    voice_name='clone',
+                    audio_files=[str(self.config.audio_prompt_path)],
+                )
+
+        return engine
+
+    def _build_synthesis_kwargs(
+        self, engine_name: str, seg: DubbingSegment, prompt: Optional[str],
+        use_multi: bool, sample_rate: int
+    ) -> Dict[str, Any]:
+        """Build engine-specific synthesis kwargs for a segment.
+
+        All engines accept these kwargs but only use what applies to them
+        (the protocol allows **kwargs, so extra params are safely ignored).
+        """
+        kwargs: Dict[str, Any] = {}
+
+        # Emotion/style parameters (most engines support)
+        emo_data = seg.metadata.get('emotion')
+        if emo_data:
+            if engine_name == 'elevenlabs':
+                # ElevenLabs uses style (0.0 = neutral, 1.0 = expressive)
+                kwargs['style'] = _EMOTION_STYLE_MAP.get(
+                    emo_data.get('primary', 'neutral'), 0.0
+                )
+            elif engine_name == 'fish':
+                # Fish Speech uses emotion name
+                kwargs['emotion'] = emo_data.get('primary')
+            elif engine_name == 'orpheus':
+                # Orpheus uses emotion name
+                kwargs['emotion'] = emo_data.get('primary')
+
+        # Voice parameters (cloning or preset)
+        if engine_name == 'qwen3':
+            kwargs['voice'] = 'clone' if prompt else 'Ryan'
+        elif engine_name in ('fish', 'f5', 'indextts', 'cosyvoice'):
+            kwargs['voice'] = 'clone' if prompt else None
+        elif engine_name == 'orpheus':
+            kwargs['voice'] = 'clone' if prompt else self.config.orpheus_voice
+
+        # Language (most engines support it)
+        if engine_name != 'chatterbox':
+            kwargs['language'] = self.config.target_language
+
+        # Engine-specific parameters
+        if engine_name == 'indextts':
+            kwargs['emotion_prompt'] = self.config.indextts_emotion_prompt
+            if seg.duration_ms > 0:
+                kwargs['target_duration_ms'] = seg.duration_ms
+        elif engine_name == 'cosyvoice':
+            kwargs['instruct'] = self.config.cosyvoice_instruct
+        elif engine_name == 'f5':
+            kwargs['speed'] = self.config.f5_speed
+        elif engine_name == 'piper':
+            # Special: Piper needs length_scale to fit the segment window
+            window_ms = int((seg.end_time - seg.start_time) * 1000)
+            if window_ms > 0:
+                # Will be handled in calling code after first synthesis
+                kwargs['_window_ms'] = window_ms
+        elif engine_name == 'chatterbox' and use_multi:
+            # Multi-voice Chatterbox uses speaker_id and emotion_params
+            kwargs['speaker_id'] = seg.speaker_id
+            if emo_data:
+                kwargs['emotion_params'] = _emotion_to_tts_params(
+                    emo_data['primary'], emo_data.get('intensity', 0.5),
+                )
+        elif engine_name == 'chatterbox':
+            # Single-voice Chatterbox uses audio prompt
+            kwargs['audio_prompt_path'] = prompt
+            kwargs['exaggeration'] = self.config.chatterbox_exaggeration
+            kwargs['cfg_weight'] = self.config.chatterbox_cfg_weight
+
+        return kwargs
 
     # ------------------------------------------------------------------
     # Step 5: Mix audio
