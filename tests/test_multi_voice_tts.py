@@ -141,7 +141,8 @@ class TestProperties:
 
     def test_sample_rate_without_engine(self):
         tts = MultiVoiceTTS()
-        assert tts.sample_rate == 24000
+        with pytest.raises(RuntimeError, match="Engine not loaded"):
+            _ = tts.sample_rate
 
     def test_sample_rate_with_engine(self):
         tts = MultiVoiceTTS()

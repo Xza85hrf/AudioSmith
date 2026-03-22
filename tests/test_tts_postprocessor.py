@@ -495,7 +495,7 @@ class TestTargetDrivenDR:
 
 class TestPerEmotionSpectralIntensity:
     def test_per_emotion_overrides_exist(self):
-        from audiosmith.tts_postprocessor import _EMOTION_SPECTRAL_INTENSITY
+        from audiosmith.emotion_config import EMOTION_SPECTRAL_INTENSITY as _EMOTION_SPECTRAL_INTENSITY
         assert "angry" in _EMOTION_SPECTRAL_INTENSITY
         assert "sad" in _EMOTION_SPECTRAL_INTENSITY
         assert "excited" in _EMOTION_SPECTRAL_INTENSITY
@@ -636,19 +636,19 @@ class TestLanguageSpectralModifiers:
 
 class TestLanguagePPOverrides:
     def test_polish_overrides_exist(self):
-        from audiosmith.pipeline import _LANGUAGE_PP_OVERRIDES
+        from audiosmith.pipeline_config import LANGUAGE_PP_OVERRIDES as _LANGUAGE_PP_OVERRIDES
         assert "pl" in _LANGUAGE_PP_OVERRIDES
         assert _LANGUAGE_PP_OVERRIDES["pl"]["spectral_intensity"] == 0.3
         assert _LANGUAGE_PP_OVERRIDES["pl"]["enable_spectral_matching"] is True
 
     def test_unknown_language_no_override(self):
-        from audiosmith.pipeline import _LANGUAGE_PP_OVERRIDES
+        from audiosmith.pipeline_config import LANGUAGE_PP_OVERRIDES as _LANGUAGE_PP_OVERRIDES
         assert _LANGUAGE_PP_OVERRIDES.get("xx") is None
 
 
 class TestEnginePresets:
     def test_all_presets_process(self):
-        from audiosmith.pipeline import _ENGINE_PP_PRESETS
+        from audiosmith.pipeline_config import ENGINE_PP_PRESETS as _ENGINE_PP_PRESETS
         wav = _make_speech_like(duration=0.5)
         text = "Hello world. This is a test."
         emotion = {"primary": "neutral", "intensity": 0.7}
@@ -662,7 +662,7 @@ class TestEnginePresets:
             assert np.all(np.isfinite(result)), f"{engine} produced NaN/Inf"
 
     def test_fish_preset_has_silence_trim(self):
-        from audiosmith.pipeline import _ENGINE_PP_PRESETS
+        from audiosmith.pipeline_config import ENGINE_PP_PRESETS as _ENGINE_PP_PRESETS
         fish = _ENGINE_PP_PRESETS["fish"]
         assert fish.get("enable_silence_trim") is True
         assert fish.get("max_silence_ms", 200) <= 120
