@@ -74,3 +74,43 @@ class TestTranscriptionPostProcessor:
         non_speech = [s for s in result if not s.is_speech]
         assert len(speech) >= 1
         assert len(non_speech) >= 1
+
+
+class TestTranscriptionPostProcessorLanguage:
+    """Tests for language-parameterized post-processing."""
+
+    def test_polish_default(self):
+        processor = TranscriptionPostProcessor()
+        assert processor._language == "pl"
+
+    def test_english_language(self):
+        processor = TranscriptionPostProcessor(language="en")
+        assert processor._language == "en"
+
+    def test_english_no_tech_corrections(self):
+        processor = TranscriptionPostProcessor(language="en")
+        segments = [DubbingSegment(
+            index=0, start_time=0.0, end_time=2.0,
+            original_text="dokier jest świetny",
+        )]
+        result = processor.stage3_punctuation_restorer(segments)
+        # English corrector has no patterns, so "dokier" stays (only capitalization and punctuation applied)
+        assert "okier" in result[0].original_text  # "dokier" → "Dokier" after capitalization
+
+    def test_polish_applies_tech_corrections(self):
+        processor = TranscriptionPostProcessor(language="pl")
+        segments = [DubbingSegment(
+            index=0, start_time=0.0, end_time=2.0,
+            original_text="dokier jest świetny",
+        )]
+        result = processor.stage3_punctuation_restorer(segments)
+        assert "Docker" in result[0].original_text
+
+    def test_english_question_detection(self):
+        processor = TranscriptionPostProcessor(language="en")
+        segments = [DubbingSegment(
+            index=0, start_time=0.0, end_time=2.0,
+            original_text="what is docker",
+        )]
+        result = processor.stage3_punctuation_restorer(segments)
+        assert result[0].original_text.endswith("?")

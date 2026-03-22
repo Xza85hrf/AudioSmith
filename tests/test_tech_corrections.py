@@ -631,3 +631,32 @@ class TestTechTermCorrectionsMLDataScience:
         """Test Pandas correction."""
         result = corrector.correct('pandas dataframe')
         assert 'Pandas' in result
+
+
+class TestTechTermCorrectionsLanguage:
+    """Tests for language-parameterized tech corrections."""
+
+    def test_polish_loads_patterns(self):
+        corrector = TechTermCorrections(language="pl")
+        assert corrector.get_pattern_count() > 0
+
+    def test_english_loads_no_patterns(self):
+        corrector = TechTermCorrections(language="en")
+        assert corrector.get_pattern_count() == 0
+
+    def test_unknown_language_loads_no_patterns(self):
+        corrector = TechTermCorrections(language="xx")
+        assert corrector.get_pattern_count() == 0
+
+    def test_english_noop_correct(self):
+        corrector = TechTermCorrections(language="en")
+        text = "dokier compose is great"
+        assert corrector.correct(text) == text  # No correction for English
+
+    def test_polish_corrects_docker(self):
+        corrector = TechTermCorrections(language="pl")
+        assert "Docker" in corrector.correct("dokier jest świetny")
+
+    def test_default_language_is_polish(self):
+        corrector = TechTermCorrections()
+        assert corrector.get_pattern_count() > 0

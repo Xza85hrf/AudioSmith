@@ -242,17 +242,25 @@ class TechTermCorrections:
     """Apply regex-based corrections for technical terminology in transcripts.
 
     Handles both standard case-normalization (e.g. "javascript" → "JavaScript")
-    and Polish phonetic corrections from Whisper (e.g. "dokier" → "Docker").
+    and language-specific phonetic corrections from Whisper (e.g. Polish "dokier" → "Docker").
+
+    Args:
+        language: ISO 639-1 code. Patterns are loaded for languages that have them;
+                  unsupported languages get an empty corrector (no-op).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, language: str = "pl") -> None:
+        self._language = language
         self._patterns: List[Tuple[str, str, str]] = []
         self._compiled: List[Tuple[re.Pattern, str]] = []
         self._load_defaults()
 
-    def _load_defaults(self):
-        for pattern, replacement in DEFAULT_PATTERNS:
-            self.add_pattern(pattern, replacement)
+    def _load_defaults(self) -> None:
+        from audiosmith.language_data import get_language
+        config = get_language(self._language)
+        if config.has_tech_corrections:
+            for pattern, replacement in DEFAULT_PATTERNS:
+                self.add_pattern(pattern, replacement)
 
     def add_pattern(self, pattern: str, replacement: str, name: str = '') -> None:
         try:

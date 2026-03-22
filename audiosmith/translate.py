@@ -33,15 +33,15 @@ def translate_gemma(
     }
     model_id = model_ids.get(model_size, model_ids['balanced'])
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir)  # nosec B615 — user-initiated, known Google model
     try:
         from transformers import BitsAndBytesConfig
         qconfig = BitsAndBytesConfig(load_in_8bit=True)
-        model = AutoModelForCausalLM.from_pretrained(
+        model = AutoModelForCausalLM.from_pretrained(  # nosec B615
             model_id, device_map='auto', cache_dir=cache_dir, quantization_config=qconfig,
         )
     except ImportError:
-        model = AutoModelForCausalLM.from_pretrained(
+        model = AutoModelForCausalLM.from_pretrained(  # nosec B615
             model_id, device_map='auto', cache_dir=cache_dir, torch_dtype=torch.bfloat16,
         )
 

@@ -1,13 +1,18 @@
 """Tests for audiosmith.polish_prosody module."""
 
+from functools import partial
+
 import numpy as np
 
-from audiosmith.polish_prosody import (POLISH_VOWELS,
-                                       _estimate_word_boundaries,
-                                       _find_vowel_clusters,
-                                       apply_penultimate_stress,
-                                       apply_question_intonation,
-                                       normalize_syllable_timing)
+from audiosmith.prosody import (POLISH_VOWELS,
+                                _estimate_word_boundaries,
+                                _find_vowel_clusters,
+                                apply_penultimate_stress,
+                                apply_question_intonation,
+                                normalize_syllable_timing)
+
+# Bind Polish vowels so existing tests keep their 1-arg signatures
+_find_vowel_clusters_pl = partial(_find_vowel_clusters, vowels=POLISH_VOWELS)
 
 SR = 24000
 
@@ -43,23 +48,23 @@ class TestPolishVowels:
 
 class TestFindVowelClusters:
     def test_simple_word(self):
-        clusters = _find_vowel_clusters("mama")
+        clusters = _find_vowel_clusters_pl("mama")
         assert len(clusters) == 2  # a, a
 
     def test_no_vowels(self):
-        clusters = _find_vowel_clusters("krk")
+        clusters = _find_vowel_clusters_pl("krk")
         assert len(clusters) == 0
 
     def test_diphthong(self):
-        clusters = _find_vowel_clusters("auto")
+        clusters = _find_vowel_clusters_pl("auto")
         assert len(clusters) == 2  # au, o
 
     def test_polish_nasal(self):
-        clusters = _find_vowel_clusters("mąka")
+        clusters = _find_vowel_clusters_pl("mąka")
         assert len(clusters) == 2  # ą, a
 
     def test_empty_string(self):
-        clusters = _find_vowel_clusters("")
+        clusters = _find_vowel_clusters_pl("")
         assert len(clusters) == 0
 
 

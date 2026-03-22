@@ -5,20 +5,15 @@ from __future__ import annotations
 import re
 from typing import List
 
-QUESTION_STARTERS = {
-    'what', 'when', 'where', 'who', 'why', 'how',
-    'is', 'are', 'was', 'were',
-    'do', 'does', 'did',
-    'can', 'could', 'will', 'would', 'should',
-    'have', 'has',
-}
+from audiosmith.language_data import get_language
 
 
 class PunctuationRestorer:
     """Restore punctuation and capitalization to raw transcribed text."""
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, language: str = "en") -> None:
+        self._language = language
+        self._question_starters = get_language(language).question_starters
 
     def restore(self, text: str) -> str:
         if not text or not text.strip():
@@ -39,6 +34,6 @@ class PunctuationRestorer:
 
     def _determine_ending(self, sentence: str) -> str:
         words = sentence.lower().split()
-        if words and words[0] in QUESTION_STARTERS:
+        if words and words[0] in self._question_starters:
             return '?'
         return '.'

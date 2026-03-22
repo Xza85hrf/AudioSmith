@@ -67,7 +67,7 @@ class TTSPostProcessor:
             2. Presence synthesis (add high-freq energy if centroid too low)
             3. Silence trimming (trim excess pauses)
             4. Micro-dynamics (word-level emphasis variation)
-            5. Language-specific prosody (Polish stress/intonation)
+            5. Language-specific prosody (stress, intonation, timing)
             6. Warmth boost (spectral brightness)
             7. Silence injection (punctuation pauses)
             8. Dynamic range expansion
@@ -181,18 +181,18 @@ class TTSPostProcessor:
             except Exception as e:
                 logger.warning("Micro-dynamics failed, skipping: %s", e)
 
-        # 3b. Language-specific prosody (Polish)
-        if lang == "pl" and text:
+        # 3b. Language-specific prosody (multi-language support)
+        if text and lang:
             try:
-                from audiosmith.polish_prosody import (
+                from audiosmith.prosody import (
                     apply_penultimate_stress, apply_question_intonation,
                     normalize_syllable_timing)
-                wav = apply_penultimate_stress(wav, sample_rate, text, intensity)
-                wav = apply_question_intonation(wav, sample_rate, text, intensity)
-                wav = normalize_syllable_timing(wav, sample_rate, text, intensity)
+                wav = apply_penultimate_stress(wav, sample_rate, text, intensity, language=lang)
+                wav = apply_question_intonation(wav, sample_rate, text, intensity, language=lang)
+                wav = normalize_syllable_timing(wav, sample_rate, text, intensity, language=lang)
                 steps_applied += 1
             except Exception as e:
-                logger.warning("Polish prosody failed, skipping: %s", e)
+                logger.warning("Language-specific prosody failed for '%s', skipping: %s", lang, e)
 
         # 4. Warmth boost (spectral brightness — skip when spectral matching handles it)
         if self.config.enable_warmth:

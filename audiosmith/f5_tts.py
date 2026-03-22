@@ -221,11 +221,11 @@ class F5TTS:
         ckpt_file = preset["ckpt"]
 
         logger.info("Downloading checkpoint from %s/%s", hf_id, ckpt_file)
-        ckpt_path = Path(hf_hub_download(repo_id=hf_id, filename=ckpt_file))
+        ckpt_path = Path(hf_hub_download(repo_id=hf_id, filename=ckpt_file))  # nosec B615 — user-initiated download from known HF repo
 
         vocab_path = None
         if "vocab" in preset:
-            vocab_path = Path(hf_hub_download(repo_id=hf_id, filename=preset["vocab"]))
+            vocab_path = Path(hf_hub_download(repo_id=hf_id, filename=preset["vocab"]))  # nosec B615
 
         return ckpt_path, vocab_path
 

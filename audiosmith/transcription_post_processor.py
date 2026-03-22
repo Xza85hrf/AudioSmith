@@ -37,9 +37,10 @@ class TranscriptionPostProcessor:
     4. Non-Speech Labeler — mark music/silence/noise segments
     """
 
-    def __init__(self) -> None:
-        self.punctuation_restorer = PunctuationRestorer()
-        self.tech_corrections = TechTermCorrections()
+    def __init__(self, language: str = "pl") -> None:
+        self._language = language
+        self.punctuation_restorer = PunctuationRestorer(language=language)
+        self.tech_corrections = TechTermCorrections(language=language)
         self.content_validator = ContentValidator()
         self.filler_regex = re.compile('|'.join(FILLER_PATTERNS), re.IGNORECASE)
         self.non_speech_regex = re.compile('|'.join(NON_SPEECH_PATTERNS), re.IGNORECASE)
