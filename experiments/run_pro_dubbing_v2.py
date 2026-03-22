@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""Run professional dubbing pipeline V2 - with SRT timing mode."""
+
+import logging
+import os
+import sys
+from pathlib import Path
+from audiosmith.pipeline import DubbingPipeline
+from audiosmith.models import DubbingConfig
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+    ]
+)
+logger = logging.getLogger('dubbing_monitor')
+
+# Load HF token for pyannote
+def load_hf_token():
+    if os.environ.get('HF_TOKEN'):
+        return os.environ['HF_TOKEN']
+    token_path = Path.home() / '.cache' / 'huggingface' / 'token'
+    if token_path.exists():
+        token = token_path.read_text().strip()
+        os.environ['HF_TOKEN'] = token
+        return token
+    return None
+
+load_hf_token()
+
+def main():
+    logger.info("=" * 60)
+    logger.info("PROFESSIONAL DUBBING PIPELINE V2 - SRT TIMING MODE")
+    logger.info("=" * 60)
+
+    config = DubbingConfig(
+        video_path=Path("test-files/videos/Marty Supreme-enchaced.mp4"),
+        output_dir=Path("test-files/videos/Marty_Supreme_pro_v2"),
+        source_language='en',
+        target_language='pl',
+        external_srt_path=Path("test-files/videos/original-transcriptions/Marty.Supreme.2025_pl.srt"),
+        use_srt_timing=True,  # NEW: Use SRT timing directly
+        isolate_vocals=True,
+        diarize=False,  # Disabled until pyannote terms accepted
+        detect_emotion=False,  # No emotion without diarization
+        tts_engine='fish',
+        max_speedup=1.3,
+        allow_extended_timing=True,
+        burn_subtitles=True,
+    )
+
+    logger.info("Configuration:")
+    logger.info(f"  - External SRT: {config.external_srt_path}")
+    logger.info(f"  - Use SRT timing: {config.use_srt_timing}")
+    logger.info(f"  - Max speedup: {config.max_speedup}x")
+    logger.info(f"  - TTS engine: {config.tts_engine}")
+    logger.info(f"  - Burn subtitles: {config.burn_subtitles}")
+
+    logger.info("=" * 60)
+    logger.info("Starting pipeline...")
+    logger.info("=" * 60)
+
+    pipeline = DubbingPipeline(config)
+    result = pipeline.run(config.video_path)
+
+    logger.info("=" * 60)
+    logger.info("PIPELINE COMPLETE")
+    logger.info("=" * 60)
+
+    if result.success:
+        logger.info(f"✓ Output video: {result.output_video_path}")
+        logger.info(f"✓ Dubbed audio: {result.dubbed_audio_path}")
+        logger.info(f"✓ Total segments: {result.total_segments}")
+        logger.info(f"✓ Segments dubbed: {result.segments_dubbed}")
+        logger.info(f"✓ Total time: {result.total_time:.1f}s")
+
+        logger.info("")
+        logger.info("Step times:")
+        for step, time_s in result.step_times.items():
+            logger.info(f"  {step}: {time_s:.1f}s")
+    else:
+        logger.error("✗ Pipeline failed!")
+        for err in result.errors:
+            logger.error(f"  {err}")
+
+    return result
+
+if __name__ == '__main__':
+    result = main()
+    sys.exit(0 if result.success else 1)
