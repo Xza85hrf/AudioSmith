@@ -103,7 +103,7 @@ Speaker-aware voice cloning that assigns distinct voices to different speakers.
 
 ## TTS Engines
 
-AudioSmith supports four TTS engines, each suited for different use cases.
+AudioSmith supports 9 TTS engines, each suited for different use cases.
 
 ### Chatterbox (Default)
 

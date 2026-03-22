@@ -145,43 +145,56 @@ See [docs/quality-features.md](docs/quality-features.md) for detailed documentat
 
 ```
 audiosmith/
-├── cli.py                      # Rich CLI (14 commands)
-├── pipeline.py                 # 10-step dubbing orchestrator with checkpoint/resume
-├── transcribe.py               # Faster-Whisper transcription
-├── translate.py                # Argos + TranslateGemma translation
-├── tts.py                      # Chatterbox multilingual TTS (voice cloning)
-├── qwen3_tts.py                # Qwen3 TTS (premium, cloning, design)
-├── piper_tts.py                # Piper lightweight ONNX TTS
-├── multi_voice_tts.py          # Speaker-aware multi-voice TTS
-├── voice_extractor.py          # Voice sample extraction and cataloging
-├── diarizer.py                 # Speaker diarization (PyAnnote)
-├── emotion.py                  # Emotion detection engine
-├── vocal_isolator.py           # Vocal isolation (Demucs)
-├── srt_formatter.py            # Broadcast-quality SRT formatting
-├── audio_normalizer.py         # LUFS analysis and normalization
-├── document_formatter.py       # SRT → TXT/PDF/DOCX export
-├── batch_processor.py          # Multi-file batch processing
-├── mixer.py                    # Audio scheduling and rendering
-├── ffmpeg.py                   # FFmpeg audio/video operations
-├── download.py                 # yt-dlp download and format helpers
-├── srt.py                      # SRT parsing and writing
-├── vad.py                      # Voice activity detection (Silero)
-├── transcription_post_processor.py  # Post-processing pipeline
-├── punctuation_restorer.py     # Punctuation restoration
-├── content_validator.py        # Content validation
-├── tech_corrections.py         # Technical term corrections
-├── transcript_corrector.py     # LLM-based transcript correction
-├── language_detect.py          # Language detection
-├── input_handler.py            # Input file handling
-├── system_check.py             # System pre-flight checks
-├── memory_manager.py           # GPU/RAM memory management
-├── metrics.py                  # Processing metrics
-├── progress.py                 # Progress tracking
-├── retry.py                    # Retry with backoff
-├── models.py                   # Data models (DubbingSegment, DubbingConfig)
-├── exceptions.py               # Exception hierarchy
-├── error_codes.py              # Error code catalog
-└── log.py                      # Logging setup
+├── commands/                       # CLI command modules
+│   ├── dub.py                      # Dub command
+│   ├── tts_cmd.py                  # TTS command (9 engines)
+│   ├── transcribe.py               # Transcribe command
+│   └── batch.py                    # Batch processing command
+├── pipeline/                       # Dubbing pipeline package
+│   ├── core.py                     # DubbingPipeline orchestrator with checkpoint/resume
+│   ├── tts_synthesis.py            # TTS engine init, synthesis, parameter building
+│   └── helpers.py                  # Segment serialization, SRT writing, text processing
+├── postprocessing/                 # TTS audio post-processing
+│   ├── processor.py                # TTSPostProcessor orchestrator (13-step chain)
+│   ├── spectral.py                 # Spectral correction, presence synthesis, warmth
+│   ├── dynamics.py                 # Dynamic range expansion and reshaping
+│   ├── silence.py                  # Silence trimming and punctuation pauses
+│   └── config.py                   # PostProcessConfig dataclass
+├── cli.py                          # Rich CLI entry point (14 commands)
+├── language_data.py                # Multi-language config (pl, en, es, fr, de)
+├── prosody.py                      # Language-aware prosody (stress, intonation, timing)
+├── emotion_config.py               # Centralized emotion → TTS parameter mappings
+├── pipeline_config.py              # Engine presets and language overrides
+├── tts_protocol.py                 # TTSEngine protocol + factory
+├── tts.py                          # Chatterbox TTS (23-lang voice cloning)
+├── qwen3_tts.py                    # Qwen3 TTS (premium, cloning, design)
+├── piper_tts.py                    # Piper lightweight ONNX TTS
+├── f5_tts.py                       # F5-TTS (flow matching, voice cloning)
+├── elevenlabs_tts.py               # ElevenLabs cloud TTS
+├── fish_speech_tts.py              # Fish Speech cloud TTS
+├── indextts_tts.py                 # IndexTTS-2 (emotion-aware)
+├── cosyvoice_tts.py                # CosyVoice2 (5.53 MOS)
+├── orpheus_tts.py                  # Orpheus (13-lang expressive)
+├── multi_voice_tts.py              # Speaker-aware multi-voice TTS
+├── transcribe.py                   # Faster-Whisper transcription
+├── translate.py                    # Argos + TranslateGemma translation
+├── transcription_post_processor.py # 4-stage text post-processing (language-aware)
+├── punctuation_restorer.py         # Punctuation restoration (multi-language)
+├── tech_corrections.py             # Technical term corrections (language-aware)
+├── voice_extractor.py              # Voice sample extraction and cataloging
+├── diarizer.py                     # Speaker diarization (PyAnnote)
+├── emotion.py                      # Emotion detection engine
+├── vocal_isolator.py               # Vocal isolation (Demucs)
+├── spectral_profiles.py            # Emotion-specific spectral targets
+├── srt_formatter.py                # Broadcast-quality SRT formatting
+├── audio_normalizer.py             # LUFS analysis and normalization
+├── document_formatter.py           # SRT → TXT/PDF/DOCX export
+├── batch_processor.py              # Multi-file batch processing
+├── mixer.py                        # Audio scheduling and rendering
+├── ffmpeg.py                       # FFmpeg audio/video operations
+├── models.py                       # Data models (DubbingSegment, DubbingConfig, etc.)
+├── exceptions.py                   # Exception hierarchy
+└── error_codes.py                  # Error code catalog
 ```
 
 ## Supported Languages
@@ -197,6 +210,9 @@ English, Chinese, Japanese, Korean, German, French, Russian, Portuguese, Spanish
 **Translation (Argos):** See [Argos Translate language pairs](https://www.argosopentech.com/argospopular/)
 **Translation (TranslateGemma):** Supports all languages available in the model.
 
+**Text Processing:**
+Question detection, technical term corrections, and prosody (stress patterns, syllable timing) are language-aware. Configure via `language_data.py` — currently supports `pl`, `en`, `es`, `fr`, `de` with extensible `LanguageConfig` dataclass.
+
 ## Development
 
 ```bash
@@ -204,7 +220,7 @@ pip install -e ".[dev]"
 python -m pytest tests/ -v
 ```
 
-402 unit tests, ~2s runtime, no GPU required.
+1091 unit tests, ~15s runtime, no GPU required.
 
 ## License
 
