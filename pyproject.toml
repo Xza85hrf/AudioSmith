@@ -44,6 +44,7 @@ ci = [
     "yt-dlp>=2024.0.0",
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "mypy>=1.0",
 ]
 
 [project.scripts]
@@ -70,10 +71,16 @@ source = ["audiosmith"]
 omit = ["audiosmith/__main__.py"]
 
 [tool.coverage.report]
-fail_under = 60
+fail_under = 75
 show_missing = true
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
 ]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
