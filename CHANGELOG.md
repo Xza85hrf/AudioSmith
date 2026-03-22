@@ -14,8 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TTSEngine protocol and factory pattern for unified interface across 9 TTS engines
 - Multi-language support infrastructure: `language_data.py` with language-specific configs (Polish, English, Spanish, French, German)
 - Bandit security scanning in CI workflow
-- 1081 tests across pipeline, quality modules, and CLI (up from ~300 in 0.4.x)
+- 1091 tests across pipeline, quality modules, and CLI (up from ~300 in 0.4.x)
 - Type hints on all public functions across 25 modules
+- CHANGELOG.md following Keep a Changelog format
+- E2E CLI integration tests for transcribe, TTS, and dub commands
 - Pipeline checkpoint/resume functionality with `PipelineState` and `DubbingStep` (49 tests)
 - Spectral profiles and emotion-aware post-processing modules
 - `torchaudio` added to `[quality]` optional dependencies
@@ -32,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TranscriptionPostProcessor` now accepts `language` parameter for language-specific processing
 - Prosody functions now gracefully skip inapplicable languages (e.g., penultimate stress rules only for Polish)
 - Coverage threshold increased from 60% to 75%
+- Split `pipeline.py` (1146 lines) into `audiosmith/pipeline/` package (core, tts_synthesis, helpers)
+- mypy now runs strict in CI (removed `|| true`); all 97 errors fixed or suppressed
 
 ### Removed
 
@@ -64,6 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI redesign with Rich UI for improved user experience
 - Added `--engine` and `--audio-prompt` options to dub command
 
-[Unreleased]: https://github.com/yourusername/AudioSmith/compare/v0.5.0...HEAD
-[0.5.0]: https://github.com/yourusername/AudioSmith/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/yourusername/AudioSmith/releases/tag/v0.4.0
+[Unreleased]: https://github.com/Xza85hrf/AudioSmith/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Xza85hrf/AudioSmith/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/Xza85hrf/AudioSmith/releases/tag/v0.4.0

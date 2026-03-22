@@ -1,4 +1,4 @@
-"""Tests for audiosmith.polish_prosody module."""
+"""Tests for audiosmith.prosody module (Polish language defaults)."""
 
 from functools import partial
 
