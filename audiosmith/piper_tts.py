@@ -27,6 +27,11 @@ class PiperTTS:
         self.data_path = data_path
         self._model: Optional[Any] = None
 
+    @property
+    def name(self) -> str:
+        """Engine identifier."""
+        return 'piper'
+
     def _load_model(self) -> None:
         if self._model is not None:
             return

@@ -157,6 +157,11 @@ class Qwen3TTS:
         self._max_audio_cache = 50
         self.sample_rate = 24000
 
+    @property
+    def name(self) -> str:
+        """Engine identifier."""
+        return 'qwen3'
+
     def _determine_device(self) -> str:
         """Determine the optimal device for inference."""
         torch = _get_torch()

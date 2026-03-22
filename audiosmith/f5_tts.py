@@ -139,9 +139,18 @@ class F5TTS:
         self.initialized = False
 
     @property
+    def name(self) -> str:
+        """Engine identifier."""
+        return 'f5'
+
+    @property
     def sample_rate(self) -> int:
         """F5-TTS outputs at 24kHz."""
         return F5_SAMPLE_RATE
+
+    def load_model(self) -> None:
+        """Load the F5-TTS model and vocoder (lazy initialization)."""
+        self._ensure_model()
 
     def _ensure_model(self) -> None:
         """Load F5-TTS model and vocoder (lazy, first call only)."""
