@@ -1,14 +1,15 @@
 """AudioSmith Fish Speech Text-to-Speech Engine.
 
-Cloud-based TTS via Fish Audio API with voice cloning and 13-language support.
-Uses the fish-audio-sdk (fishaudio) package for API communication.
+Cloud-based TTS via Fish Audio API with voice cloning and multilingual support.
+Uses the fish-audio-sdk package (fish_audio_sdk) for API communication.
 
 Features:
-- 13 languages (en, zh, ja, ko, de, fr, es, pt, ru, nl, it, pl, ar)
+- 13+ languages (en, zh, ja, ko, de, fr, es, pt, ru, nl, it, pl, ar)
 - Instant voice cloning from 10-30s reference audio
-- Persistent voice models (create once, reuse)
-- Streaming synthesis support
-- S1 (4B) and S1-mini (0.5B) model variants
+- Persistent voice models (create once, reuse via reference_id)
+- Quality parameters: temperature, top_p, chunk_length
+- Prosody control: speed and volume
+- Multiple backends: speech-1.5, speech-1.6, s2-pro
 
 Requires: FISH_API_KEY environment variable.
 """
@@ -26,16 +27,16 @@ from audiosmith.exceptions import TTSError
 logger = logging.getLogger("audiosmith.fish_speech_tts")
 
 
-def _get_fishaudio():
-    """Lazy import and return the fishaudio module."""
+def _get_sdk():
+    """Lazy import and return the fish_audio_sdk module."""
     try:
-        import fishaudio
+        import fish_audio_sdk
     except ImportError:
         raise TTSError(
             "fish-audio-sdk not installed. Install: pip install fish-audio-sdk",
             error_code="FISH_IMPORT_ERR",
         )
-    return fishaudio
+    return fish_audio_sdk
 
 
 def _get_soundfile():
@@ -50,24 +51,11 @@ def _get_soundfile():
     return sf
 
 
-# ISO 639-1 → Fish Speech language name
-FISH_LANGUAGE_MAP: Dict[str, str] = {
-    "en": "english",
-    "zh": "chinese",
-    "ja": "japanese",
-    "ko": "korean",
-    "de": "german",
-    "fr": "french",
-    "es": "spanish",
-    "pt": "portuguese",
-    "ru": "russian",
-    "nl": "dutch",
-    "it": "italian",
-    "pl": "polish",
-    "ar": "arabic",
+# ISO 639-1 codes supported by Fish Speech
+FISH_LANGS: Set[str] = {
+    "en", "zh", "ja", "ko", "de", "fr", "es", "pt",
+    "ru", "nl", "it", "pl", "ar",
 }
-
-FISH_LANGS: Set[str] = set(FISH_LANGUAGE_MAP.keys())
 
 
 class FishSpeechTTS:
@@ -79,11 +67,20 @@ class FishSpeechTTS:
 
     def __init__(
         self,
-        model_id: str = "s1",
+        backend: str = "speech-1.6",
+        temperature: float = 0.7,
+        top_p: float = 0.7,
+        reference_id: Optional[str] = None,
+        base_url: Optional[str] = None,
     ) -> None:
-        self.model_id = model_id
+        self.backend = backend
+        self.temperature = temperature
+        self.top_p = top_p
+        self.default_reference_id = reference_id
+        self.base_url = base_url  # None = cloud, or "http://localhost:8080" for local
         self._client: Any = None
-        self._cloned_voices: Dict[str, str] = {}  # name → reference_id
+        self._cloned_voices: Dict[str, str] = {}  # name -> reference_id
+        self._inline_references: Dict[str, Any] = {}  # name -> ReferenceAudio
         self.initialized = False
 
     @property
@@ -101,22 +98,35 @@ class FishSpeechTTS:
         self._ensure_client()
 
     def _ensure_client(self) -> None:
-        """Initialize the Fish Audio client (lazy, checks API key)."""
+        """Initialize the Fish Audio Session (lazy, checks API key for cloud)."""
         if self._client is not None:
             return
 
-        api_key = os.getenv("FISH_API_KEY")
-        if not api_key:
-            raise TTSError(
-                "FISH_API_KEY environment variable not set. "
-                "Get a key at https://fish.audio",
-                error_code="FISH_AUTH_ERR",
-            )
+        sdk = _get_sdk()
 
-        fishaudio = _get_fishaudio()
-        self._client = fishaudio.FishAudio(api_key=api_key)
-        self.initialized = True
-        logger.info("Fish Audio client initialized (model=%s)", self.model_id)
+        if self.base_url:
+            # Local server mode — no API key required
+            self._client = sdk.Session(apikey="local", base_url=self.base_url)
+            self.initialized = True
+            logger.info(
+                "Fish Audio local Session initialized (url=%s, backend=%s)",
+                self.base_url, self.backend,
+            )
+        else:
+            # Cloud mode — requires API key
+            api_key = os.getenv("FISH_API_KEY")
+            if not api_key:
+                raise TTSError(
+                    "FISH_API_KEY environment variable not set. "
+                    "Get a key at https://fish.audio",
+                    error_code="FISH_AUTH_ERR",
+                )
+            self._client = sdk.Session(apikey=api_key)
+            self.initialized = True
+            logger.info(
+                "Fish Audio cloud Session initialized (backend=%s, temp=%.1f, top_p=%.1f)",
+                self.backend, self.temperature, self.top_p,
+            )
 
     def synthesize(
         self,
@@ -124,16 +134,17 @@ class FishSpeechTTS:
         voice: Optional[str] = None,
         language: Optional[str] = None,
         emotion: Optional[str] = None,
+        **kwargs: Any,
     ) -> Tuple[np.ndarray, int]:
         """Synthesize text to audio.
 
         Args:
             text: Text to synthesize.
-            voice: Voice name (looks up cloned voices) or reference_id.
-            language: Language code (ISO 639-1).
+            voice: Voice name (looks up cloned/inline voices) or reference_id.
+            language: Language code (ISO 639-1). Fish auto-detects, but passed
+                for compatibility with the TTS protocol.
             emotion: Emotion marker (e.g. 'angry', 'sad', 'excited').
-                Fish Speech natively supports 45+ emotion markers across
-                all languages. The marker is prepended as ``(emotion) text``.
+                Prepended as [emotion] tag which Fish Speech processes natively.
 
         Returns:
             Tuple of (audio_array float32, sample_rate).
@@ -141,21 +152,32 @@ class FishSpeechTTS:
         if not text or not text.strip():
             raise TTSError("Text cannot be empty", error_code="FISH_TEXT_ERR")
 
-        # Inject emotion marker — Fish Speech processes these natively
+        # Inject emotion tag -- Fish Speech supports inline style tags
         if emotion:
-            text = f"({emotion}) {text}"
+            text = f"[{emotion}] {text}"
 
         self._ensure_client()
+        sdk = _get_sdk()
 
-        # Resolve voice to reference_id
-        reference_id = self._resolve_voice(voice)
+        # Resolve voice to reference_id or inline references
+        reference_id = self._resolve_reference_id(voice)
+        references = self._resolve_inline_references(voice)
 
         try:
-            kwargs: Dict[str, Any] = {"text": text}
-            if reference_id:
-                kwargs["reference_id"] = reference_id
+            request = sdk.TTSRequest(
+                text=text,
+                reference_id=reference_id,
+                references=references,
+                format="wav",
+                temperature=self.temperature,
+                top_p=self.top_p,
+                chunk_length=200,
+                normalize=True,
+                latency="normal",
+            )
 
-            audio_bytes = self._client.tts.convert(**kwargs)
+            # tts() returns a streaming generator of bytes
+            audio_bytes = b"".join(self._client.tts(request, backend=self.backend))
             return self._bytes_to_audio(audio_bytes)
 
         except TTSError:
@@ -183,11 +205,14 @@ class FishSpeechTTS:
     def create_voice_clone(
         self,
         voice_name: str,
-        ref_audio: Union[str, Tuple[np.ndarray, int]],
+        ref_audio: Union[str, Path, Tuple[np.ndarray, int]],
         ref_text: Optional[str] = None,
         description: str = "",
     ) -> str:
-        """Clone a voice from reference audio via Fish Audio API.
+        """Clone a voice from reference audio.
+
+        Creates a persistent voice model on Fish Audio AND stores inline
+        reference audio for per-request usage.
 
         Args:
             voice_name: Name for the cloned voice.
@@ -199,40 +224,49 @@ class FishSpeechTTS:
             The voice reference_id for use in synthesize().
         """
         self._ensure_client()
+        sdk = _get_sdk()
 
-        # Load reference audio bytes
         audio_bytes = self._load_ref_audio(ref_audio)
-
-        # Validate duration (10-30s recommended)
         self._validate_ref_duration(ref_audio)
 
+        # Store inline reference for per-request usage (more reliable)
+        self._inline_references[voice_name] = sdk.ReferenceAudio(
+            audio=audio_bytes,
+            text=ref_text or "",
+        )
+        logger.info("Fish Speech inline reference '%s' stored", voice_name)
+
+        # Also create a persistent model on Fish Audio
         try:
-            voice = self._client.voices.create(
+            model = self._client.create_model(
                 title=voice_name,
                 voices=[audio_bytes],
-                description=description or f"Cloned voice: {voice_name}",
+                texts=[ref_text] if ref_text else None,
+                description=description or f"AudioSmith cloned voice: {voice_name}",
+                visibility="private",
             )
-            voice_id: str = voice.id  # type: ignore[attr-defined]
+            voice_id: str = model.id
             self._cloned_voices[voice_name] = voice_id
             logger.info(
-                "Fish Speech voice '%s' created (id=%s)", voice_name, voice_id,
+                "Fish Speech model '%s' created (id=%s)", voice_name, voice_id,
             )
             return voice_id
 
-        except TTSError:
-            raise
         except Exception as e:
-            raise TTSError(
-                f"Voice cloning failed: {e}",
-                error_code="FISH_CLONE_ERR",
-                original_error=e,
+            # Inline reference is still available even if model creation fails
+            logger.warning(
+                "Fish Audio model creation failed (inline ref still available): %s", e,
             )
+            return voice_name
 
     def get_available_voices(self) -> Dict[str, Dict[str, Any]]:
         """Get cloned voices (Fish Speech has no preset voices, only clones)."""
         voices: Dict[str, Dict[str, Any]] = {}
         for name, vid in self._cloned_voices.items():
             voices[name] = {"type": "cloned", "reference_id": vid}
+        for name in self._inline_references:
+            if name not in voices:
+                voices[name] = {"type": "inline"}
         return voices
 
     def save_audio(
@@ -252,8 +286,14 @@ class FishSpeechTTS:
 
     def cleanup(self) -> None:
         """Release client and clear caches."""
+        if self._client is not None:
+            try:
+                self._client.__exit__(None, None, None)
+            except Exception:
+                pass
         self._client = None
         self._cloned_voices.clear()
+        self._inline_references.clear()
         self.initialized = False
         logger.info("Fish Speech TTS cleaned up")
 
@@ -263,21 +303,27 @@ class FishSpeechTTS:
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.cleanup()
 
-    def _resolve_voice(self, voice: Optional[str]) -> Optional[str]:
-        """Resolve voice name to reference_id."""
-        if not voice:
-            return None
-        # Check cloned voices first
-        if voice in self._cloned_voices:
+    def _resolve_reference_id(self, voice: Optional[str]) -> Optional[str]:
+        """Resolve voice name to a reference_id (persistent model)."""
+        if voice and voice in self._inline_references:
+            return None  # Prefer inline path
+        if voice and voice in self._cloned_voices:
             return self._cloned_voices[voice]
-        # Assume it's a raw reference_id
-        return voice
+        if voice:
+            return voice  # Assume raw reference_id
+        return self.default_reference_id
+
+    def _resolve_inline_references(self, voice: Optional[str]) -> list:
+        """Resolve voice name to inline ReferenceAudio list."""
+        if voice and voice in self._inline_references:
+            return [self._inline_references[voice]]
+        return []
 
     def _load_ref_audio(
-        self, ref_audio: Union[str, Tuple[np.ndarray, int]]
+        self, ref_audio: Union[str, Path, Tuple[np.ndarray, int]]
     ) -> bytes:
         """Load reference audio as bytes for the API."""
-        if isinstance(ref_audio, str):
+        if isinstance(ref_audio, (str, Path)):
             path = Path(ref_audio)
             if not path.exists():
                 raise TTSError(
@@ -286,7 +332,7 @@ class FishSpeechTTS:
                 )
             return path.read_bytes()
 
-        # numpy array + sample rate → WAV bytes
+        # numpy array + sample rate -> WAV bytes
         audio_arr, sr = ref_audio
         sf = _get_soundfile()
         buf = io.BytesIO()
@@ -294,13 +340,13 @@ class FishSpeechTTS:
         return buf.getvalue()
 
     def _validate_ref_duration(
-        self, ref_audio: Union[str, Tuple[np.ndarray, int]]
+        self, ref_audio: Union[str, Path, Tuple[np.ndarray, int]]
     ) -> None:
         """Warn if reference audio is too short (< 10s) or too long (> 60s)."""
         try:
-            if isinstance(ref_audio, str):
+            if isinstance(ref_audio, (str, Path)):
                 sf = _get_soundfile()
-                info = sf.info(ref_audio)
+                info = sf.info(str(ref_audio))
                 duration = info.duration
             else:
                 audio_arr, sr = ref_audio
@@ -314,12 +360,12 @@ class FishSpeechTTS:
                 )
             if duration < 10.0:
                 logger.warning(
-                    "Reference audio is %.1fs — 10-30s recommended for best quality",
+                    "Reference audio is %.1fs -- 10-30s recommended for best quality",
                     duration,
                 )
             if duration > 60.0:
                 logger.warning(
-                    "Reference audio is %.1fs — trimming to first 30s recommended",
+                    "Reference audio is %.1fs -- trimming to first 30s recommended",
                     duration,
                 )
         except TTSError:

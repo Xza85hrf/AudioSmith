@@ -198,11 +198,17 @@ class DubbingPipeline(TTSSynthesisMixin):
         """
         max_gap = self.config.merge_max_gap_ms / 1000.0
         max_dur = self.config.merge_max_duration_s
-        # Chatterbox generates longer audio per word — use tighter limits
+        # Engine-specific merge limits
         engine = getattr(self.config, 'tts_engine', 'piper')
         if engine in ('chatterbox', 'auto') and self.config.target_language not in self._QWEN3_LANGS:
             max_word_cap = 12
             max_dur = min(max_dur, 4.0)
+        elif engine == 'fish':
+            # Fish Speech S2-Pro hallucinates on short inputs (<8 words).
+            # Use wider merge: more words per segment, larger gap tolerance.
+            max_gap = max(max_gap, 1.5)
+            max_dur = max(max_dur, 12.0)
+            max_word_cap = 40
         else:
             max_word_cap = 30
         merged: List[DubbingSegment] = []

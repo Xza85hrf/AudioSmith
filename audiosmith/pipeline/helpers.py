@@ -1,5 +1,6 @@
 """Utility functions for the dubbing pipeline."""
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -105,3 +106,25 @@ def _dedup_repeated_words(text: str, max_repeats: int = 2) -> str:
             result.append(w)
             count = 1
     return ' '.join(result)
+
+
+def _clean_tts_text(text: str) -> str:
+    """Strip non-speakable content from SRT text before TTS synthesis.
+
+    Removes: [stage directions], (parenthetical notes), music lyrics,
+    speaker tags like [Marty], and leading dialogue em-dashes.
+    """
+    if not text:
+        return text
+    # Remove bracketed content: [Muzyka], [chrząkanie], [Marty], etc.
+    text = re.sub(r'\[.*?\]', '', text)
+    # Remove parenthetical directions: (laughing), (whispering)
+    text = re.sub(r'\(.*?\)', '', text)
+    # Remove music/lyrics lines: anything with music note symbols
+    text = re.sub(r'♪[^♪]*♪', '', text)
+    text = re.sub(r'♪.*', '', text)
+    # Strip leading dialogue em-dashes (keep the text after)
+    text = re.sub(r'^\s*[–—-]\s*', '', text, flags=re.MULTILINE)
+    # Collapse whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text

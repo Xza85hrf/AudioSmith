@@ -86,7 +86,7 @@ class TTSSynthesisMixin:
         """Generate TTS audio for all segments."""
         import soundfile as sf
 
-        from audiosmith.pipeline.helpers import _dedup_repeated_words
+        from audiosmith.pipeline.helpers import _clean_tts_text, _dedup_repeated_words
 
         tts_dir = Path(self.config.output_dir) / 'tts_segments'
         tts_dir.mkdir(parents=True, exist_ok=True)
@@ -100,6 +100,8 @@ class TTSSynthesisMixin:
         use_multi = False
         if tts_engine_name == 'chatterbox':
             engine, sample_rate, use_multi = self._init_chatterbox_engine(segments)
+        elif tts_engine_name == 'fish':
+            engine, sample_rate = self._init_fish_engine()
         else:
             # Use factory for all other engines
             engine = self._create_engine_with_factory(tts_engine_name)
@@ -107,6 +109,11 @@ class TTSSynthesisMixin:
 
         for seg in segments:
             text = seg.translated_text or seg.original_text
+            if not text.strip():
+                continue
+
+            # Clean non-speakable SRT content (stage directions, lyrics, etc.)
+            text = _clean_tts_text(text)
             if not text.strip():
                 continue
 
@@ -153,7 +160,7 @@ class TTSSynthesisMixin:
                 continue
 
             # Post-process TTS for naturalness (skip cloud/emotion-native engines)
-            if self.config.post_process_tts and tts_engine_name not in ('elevenlabs', 'indextts', 'cosyvoice', 'orpheus'):
+            if self.config.post_process_tts and tts_engine_name not in ('elevenlabs', 'fish', 'indextts', 'cosyvoice', 'orpheus'):
                 try:
                     from audiosmith.tts_postprocessor import (
                         PostProcessConfig, TTSPostProcessor)
@@ -282,15 +289,78 @@ class TTSSynthesisMixin:
         return engine, engine.sample_rate
 
     def _init_fish_engine(self) -> Tuple:
-        """Initialize Fish Speech TTS (cloud API)."""
+        """Initialize Fish Speech TTS (cloud or local)."""
         from audiosmith.fish_speech_tts import FishSpeechTTS
-        engine = FishSpeechTTS()
+        engine = FishSpeechTTS(
+            backend=self.config.fish_backend,
+            temperature=self.config.fish_temperature,
+            top_p=self.config.fish_top_p,
+            reference_id=self.config.fish_reference_id,
+            base_url=self.config.fish_base_url,
+        )
         if self.config.audio_prompt_path:
             engine.create_voice_clone(
                 voice_name='clone',
                 ref_audio=str(self.config.audio_prompt_path),
             )
+        elif self.config.fish_base_url and not self.config.fish_reference_id:
+            # Local server without explicit reference: bootstrap a voice
+            # by generating a sample in the target language, then register it
+            self._bootstrap_fish_voice(engine)
         return engine, engine.sample_rate
+
+    def _bootstrap_fish_voice(self, engine: Any) -> None:
+        """Generate a voice sample in the target language and register as reference.
+
+        This ensures consistent voice across all segments when using a local
+        Fish Speech server without a pre-registered reference_id.
+        """
+        import os
+        import requests
+        import tempfile
+
+        lang = self.config.target_language
+        # Representative text samples per language for bootstrapping
+        bootstrap_texts = {
+            'pl': 'Kupiłam tu przed chwilą buty od pana. Ta kobieta mówi, że kupiła tu buty. Są świetne, od razu je założyłam. Czy możliwe, że je położyłeś w jednej z tych pudełek? Sprawdzimy piwnicę.',
+            'en': 'I bought shoes here just a moment ago. That woman says she bought shoes here. They are great, I put them on right away. Is it possible you placed them in one of those boxes? We will check the basement.',
+            'de': 'Ich habe gerade hier Schuhe gekauft. Diese Frau sagt, sie hat hier Schuhe gekauft. Sie sind toll, ich habe sie sofort angezogen. Ist es möglich, dass du sie in eine dieser Kisten gelegt hast?',
+            'fr': "J'ai acheté des chaussures ici il y a un instant. Cette femme dit qu'elle a acheté des chaussures ici. Elles sont superbes, je les ai mises tout de suite.",
+            'es': 'Acabo de comprar zapatos aquí. Esa mujer dice que compró zapatos aquí. Son geniales, me los puse enseguida. Es posible que los hayas puesto en una de esas cajas?',
+        }
+        text = bootstrap_texts.get(lang, bootstrap_texts['en'])
+
+        try:
+            logger.info("Bootstrapping Fish Speech voice for '%s'...", lang)
+            audio, sr = engine.synthesize(text=text)
+            if len(audio) < sr:  # less than 1 second
+                logger.warning("Bootstrap voice too short, skipping registration")
+                return
+
+            # Save to temp file for registration
+            import soundfile as sf
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+                sf.write(tmp.name, audio, sr)
+                tmp_path = tmp.name
+
+            # Register on local server
+            ref_id = f'bootstrap-{lang}'
+            with open(tmp_path, 'rb') as f:
+                resp = requests.post(
+                    f'{self.config.fish_base_url}/v1/references/add',
+                    files={'audio': ('ref.wav', f.read(), 'audio/wav')},
+                    data={'id': ref_id, 'text': text},
+                    timeout=30,
+                )
+            if resp.status_code == 200:
+                engine.default_reference_id = ref_id
+                logger.info("Fish Speech voice bootstrapped as '%s'", ref_id)
+            else:
+                logger.warning("Failed to register bootstrap voice: %s", resp.status_code)
+
+            os.unlink(tmp_path)
+        except Exception as e:
+            logger.warning("Fish Speech voice bootstrap failed: %s", e)
 
     def _init_indextts_engine(self) -> Tuple:
         """Initialize IndexTTS-2 engine (local, emotion-aware EN/ZH)."""

@@ -23,6 +23,49 @@ class TestDubbingConfig:
         assert cfg.resume is True
         assert cfg.max_speedup == 2.0
 
+    def test_fish_config_defaults(self, tmp_path):
+        """Test Fish Speech config defaults."""
+        cfg = DubbingConfig(video_path=Path('v.mp4'), output_dir=tmp_path)
+        assert cfg.fish_reference_id is None
+        assert cfg.fish_base_url is None
+        assert cfg.fish_backend == 'speech-1.6'
+        assert cfg.fish_temperature == 0.7
+        assert cfg.fish_top_p == 0.7
+
+    def test_fish_config_cloud_mode(self, tmp_path):
+        """Test Fish Speech cloud mode (no base_url)."""
+        cfg = DubbingConfig(
+            video_path=Path('v.mp4'), output_dir=tmp_path,
+            fish_reference_id='ref-123',
+            fish_backend='speech-1.6',
+            fish_temperature=0.5,
+            fish_top_p=0.8,
+        )
+        assert cfg.fish_reference_id == 'ref-123'
+        assert cfg.fish_base_url is None  # Cloud mode
+        assert cfg.fish_backend == 'speech-1.6'
+        assert cfg.fish_temperature == 0.5
+        assert cfg.fish_top_p == 0.8
+
+    def test_fish_config_local_mode(self, tmp_path):
+        """Test Fish Speech local server mode."""
+        cfg = DubbingConfig(
+            video_path=Path('v.mp4'), output_dir=tmp_path,
+            fish_base_url='http://localhost:8080',
+            fish_backend='speech-1.6',
+        )
+        assert cfg.fish_base_url == 'http://localhost:8080'
+        assert cfg.fish_reference_id is None
+        assert cfg.fish_backend == 'speech-1.6'
+
+    def test_fish_config_custom_local_url(self, tmp_path):
+        """Test Fish Speech with custom local server URL."""
+        cfg = DubbingConfig(
+            video_path=Path('v.mp4'), output_dir=tmp_path,
+            fish_base_url='http://192.168.1.100:9090',
+        )
+        assert cfg.fish_base_url == 'http://192.168.1.100:9090'
+
 
 class TestDubbingSegment:
     def test_duration_ms(self):

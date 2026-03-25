@@ -302,7 +302,7 @@ class TestDubbingConfigDefaults:
             video_path=Path('video.mp4'),
             output_dir=tmp_path,
         )
-        assert config.burn_subtitles is True
+        assert config.burn_subtitles is False
         assert config.isolate_vocals is False
         assert config.diarize is False
         assert config.detect_emotion is False

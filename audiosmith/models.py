@@ -56,7 +56,12 @@ class DubbingConfig:
     f5_ref_audio: Optional[Path] = None
     f5_ref_text: Optional[str] = None
     f5_speed: float = 1.0
-    burn_subtitles: bool = True
+    fish_reference_id: Optional[str] = None  # Persistent voice model ID from fish.audio
+    fish_base_url: Optional[str] = None  # Local server URL (e.g. "http://localhost:8080")
+    fish_backend: str = 'speech-1.6'  # Fish Audio model backend
+    fish_temperature: float = 0.7
+    fish_top_p: float = 0.7
+    burn_subtitles: bool = False
     isolate_vocals: bool = False
     diarize: bool = False
     detect_emotion: bool = False

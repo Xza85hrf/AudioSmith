@@ -262,6 +262,130 @@ class TestBuildSynthesisKwargs:
 
 
 # ============================================================================
+# _bootstrap_fish_voice() Tests
+# ============================================================================
+
+
+class TestBootstrapFishVoice:
+    """Test Fish Speech voice bootstrapping for local servers."""
+
+    @patch("requests.post")
+    @patch("soundfile.write")
+    def test_bootstrap_voice_success(self, mock_write, mock_post, config):
+        """Test successful voice bootstrap registration."""
+        config.tts_engine = "fish"
+        config.target_language = "en"
+        config.fish_base_url = "http://localhost:8080"
+        config.fish_reference_id = None
+        p = DubbingPipeline(config)
+
+        # Mock engine
+        mock_engine = MagicMock()
+        mock_engine.synthesize.return_value = (np.zeros(44100, dtype=np.float32), 44100)
+
+        # Mock successful POST response
+        mock_post.return_value.status_code = 200
+
+        p._bootstrap_fish_voice(mock_engine)
+
+        # Verify synthesize was called
+        assert mock_engine.synthesize.called
+        # Verify POST request was made to register voice
+        assert mock_post.called
+        call_kwargs = mock_post.call_args[1]
+        assert "data" in call_kwargs
+        assert call_kwargs["data"]["id"] == "bootstrap-en"
+
+    @patch("requests.post")
+    @patch("soundfile.write")
+    def test_bootstrap_voice_too_short_skipped(self, mock_write, mock_post, config):
+        """Test that bootstrap is skipped if generated audio is too short."""
+        config.tts_engine = "fish"
+        config.target_language = "pl"
+        config.fish_base_url = "http://localhost:8080"
+        config.fish_reference_id = None
+        p = DubbingPipeline(config)
+
+        # Mock engine returning very short audio (< 1 second)
+        mock_engine = MagicMock()
+        mock_engine.synthesize.return_value = (np.zeros(10000, dtype=np.float32), 44100)
+
+        p._bootstrap_fish_voice(mock_engine)
+
+        # POST should NOT be called because audio is too short
+        assert not mock_post.called
+
+    @patch("requests.post")
+    @patch("soundfile.write")
+    def test_bootstrap_voice_sets_default_reference_id(self, mock_write, mock_post, config):
+        """Test that default_reference_id is set after successful bootstrap."""
+        config.tts_engine = "fish"
+        config.target_language = "de"
+        config.fish_base_url = "http://localhost:8080"
+        config.fish_reference_id = None
+        p = DubbingPipeline(config)
+
+        # Mock engine
+        mock_engine = MagicMock()
+        mock_engine.synthesize.return_value = (np.zeros(44100, dtype=np.float32), 44100)
+        mock_engine.default_reference_id = None
+
+        # Mock successful POST response
+        mock_post.return_value.status_code = 200
+
+        p._bootstrap_fish_voice(mock_engine)
+
+        # Verify default_reference_id was set
+        assert mock_engine.default_reference_id == "bootstrap-de"
+
+    @patch("requests.post")
+    @patch("soundfile.write")
+    def test_bootstrap_voice_handles_post_failure(self, mock_write, mock_post, config):
+        """Test that POST failure is handled gracefully."""
+        config.tts_engine = "fish"
+        config.target_language = "es"
+        config.fish_base_url = "http://localhost:8080"
+        config.fish_reference_id = None
+        p = DubbingPipeline(config)
+
+        # Mock engine
+        mock_engine = MagicMock()
+        mock_engine.synthesize.return_value = (np.zeros(44100, dtype=np.float32), 44100)
+
+        # Mock failed POST response
+        mock_post.return_value.status_code = 500
+
+        # Should not raise, just log warning
+        p._bootstrap_fish_voice(mock_engine)
+
+        # Verify POST was attempted
+        assert mock_post.called
+        # Verify the response code was checked (logged as warning)
+        # The method should not have set default_reference_id to "bootstrap-es"
+        # (it would only set it on success status 200)
+
+    @patch("requests.post")
+    @patch("soundfile.write")
+    def test_bootstrap_voice_exception_handling(self, mock_write, mock_post, config):
+        """Test that exceptions during bootstrap are caught and logged."""
+        config.tts_engine = "fish"
+        config.target_language = "fr"
+        config.fish_base_url = "http://localhost:8080"
+        config.fish_reference_id = None
+        p = DubbingPipeline(config)
+
+        # Mock engine that raises exception
+        mock_engine = MagicMock()
+        mock_engine.synthesize.side_effect = Exception("Synthesis failed")
+
+        # Should not raise, exception should be caught
+        p._bootstrap_fish_voice(mock_engine)
+
+        # POST should NOT be called because synthesis failed
+        assert not mock_post.called
+
+
+# ============================================================================
 # _merge_segments() Tests
 # ============================================================================
 
@@ -353,6 +477,58 @@ class TestMergeSegments:
     def test_empty_input(self, pipeline):
         result = pipeline._merge_segments([])
         assert result == []
+
+    def test_merge_respects_wider_params_for_fish_speech(self, config):
+        """Fish Speech S2-Pro needs wider merge params to avoid hallucination on short inputs.
+
+        Wider merge: max_gap=1.5s, max_dur=12.0s, max_word_cap=40.
+        This allows Fish Speech to work with longer consolidated segments.
+        """
+        config.tts_engine = "fish"
+        config.target_language = "pl"
+        p = DubbingPipeline(config)
+
+        # Two segments with 1.2s gap (would not merge normally at 0.5s default)
+        # and combined duration of 10s (exceeds normal 8s default)
+        # and 35 words (exceeds normal 30 cap)
+        words_a = " ".join(["word"] * 18)  # 18 words
+        words_b = " ".join(["word"] * 17)  # 17 words, total 35
+        segments = [
+            _seg(0, 0.0, 4.0, translated=words_a),
+            _seg(1, 5.2, 10.0, translated=words_b),  # 1.2s gap, 10s duration
+        ]
+        result = p._merge_segments(segments)
+        # Should merge because Fish Speech has wider params
+        assert len(result) == 1
+        assert result[0].translated_text.count("word") == 35
+
+    def test_fish_speech_respects_word_cap_of_40(self, config):
+        """Fish Speech has max_word_cap of 40, not the default 30."""
+        config.tts_engine = "fish"
+        config.target_language = "en"  # In FISH_LANGS
+        p = DubbingPipeline(config)
+
+        # 35 words is within Fish's 40-word cap
+        words = " ".join(["word"] * 35)
+        segments = [
+            _seg(0, 0.0, 5.0, translated=words),
+        ]
+        result = p._merge_segments(segments)
+        # Should NOT be split because 35 < 40 (Fish's cap)
+        assert len(result) == 1
+
+    def test_fish_speech_exceeding_40_word_cap_still_splits(self, config):
+        """Fish Speech still splits if segment exceeds 40-word cap."""
+        config.tts_engine = "fish"
+        config.target_language = "en"
+        p = DubbingPipeline(config)
+
+        # 45 words exceeds Fish's 40-word cap
+        long_text = "First sentence. " + " ".join(["word"] * 43) + ". Last sentence."
+        segments = [_seg(0, 0.0, 15.0, translated=long_text)]
+        result = p._merge_segments(segments)
+        # Should be split because 45 > 40 cap
+        assert len(result) >= 2
 
 
 # ============================================================================
