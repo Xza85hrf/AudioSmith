@@ -4,6 +4,16 @@ import shutil
 import sys
 from pathlib import Path
 
+# Ensure Rich's Unicode glyphs can be emitted on Windows even when stdout is
+# redirected or running under a cp1252 code page. Must happen before Rich
+# captures the stream encoding.
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass
+
 import click
 from rich.console import Console
 from rich.panel import Panel
