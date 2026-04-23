@@ -42,20 +42,21 @@ class TestDubbingPipelineInit:
 class TestHelpers:
     def test_segments_roundtrip(self, config):
         p = DubbingPipeline(config)
+        seg_path = Path('/tmp/seg.wav')
         segments = [
             DubbingSegment(index=0, start_time=0.0, end_time=1.5, original_text='hi',
                           translated_text='cześć'),
             DubbingSegment(index=1, start_time=2.0, end_time=3.0, original_text='bye',
-                          tts_audio_path=Path('/tmp/seg.wav'), tts_duration_ms=800),
+                          tts_audio_path=seg_path, tts_duration_ms=800),
         ]
         dicts = p._segments_to_dicts(segments)
         assert len(dicts) == 2
         assert dicts[0]['translated_text'] == 'cześć'
-        assert dicts[1]['tts_audio_path'] == '/tmp/seg.wav'
+        assert dicts[1]['tts_audio_path'] == str(seg_path)
 
         restored = p._dicts_to_segments(dicts)
         assert restored[0].translated_text == 'cześć'
-        assert restored[1].tts_audio_path == Path('/tmp/seg.wav')
+        assert restored[1].tts_audio_path == seg_path
         assert restored[1].tts_duration_ms == 800
 
     def test_write_srt(self, config, tmp_path):
@@ -66,6 +67,6 @@ class TestHelpers:
         ]
         srt_path = tmp_path / 'test.srt'
         p._write_srt(segments, srt_path)
-        content = srt_path.read_text()
+        content = srt_path.read_text(encoding='utf-8')
         assert 'cześć' in content
         assert '-->' in content
