@@ -48,11 +48,15 @@ console = Console()
               help='Orpheus preset voice (default: tara).')
 @click.option('--orpheus-temperature', default=None, type=float,
               help='Orpheus generation temperature (default: 0.7).')
+@click.option('--fish-base-url', default=None,
+              help='Fish Speech local server URL (e.g. http://127.0.0.1:8080).')
+@click.option('--fish-reference-id', default=None,
+              help='Fish Speech voice reference_id (registered on server).')
 @click.option('--post-process/--no-post-process', 'post_process_tts', default=True,
               help='Post-process local TTS for naturalness (silence, dynamics, warmth).')
 @click.option('--post-process-intensity', default=0.7, type=float,
               help='Post-processing aggressiveness [0=off, 2=aggressive] (default: 0.7).')
-def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, isolate_vocals, engine, audio_prompt, max_speedup, elevenlabs_model, elevenlabs_voice, indextts_model, indextts_emo_alpha, indextts_emotion_audio, cosyvoice_model_dir, cosyvoice_instruct, orpheus_voice, orpheus_temperature, post_process_tts, post_process_intensity):
+def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, isolate_vocals, engine, audio_prompt, max_speedup, elevenlabs_model, elevenlabs_voice, indextts_model, indextts_emo_alpha, indextts_emotion_audio, cosyvoice_model_dir, cosyvoice_instruct, orpheus_voice, orpheus_temperature, fish_base_url, fish_reference_id, post_process_tts, post_process_intensity):
     """Dub a video into another language."""
     from audiosmith.models import DubbingConfig
     from audiosmith.pipeline import DubbingPipeline
@@ -99,6 +103,10 @@ def dub(video, target_lang, source_lang, output_dir, resume, diarize, emotion, i
             kwargs['orpheus_voice'] = orpheus_voice
         if orpheus_temperature is not None:
             kwargs['orpheus_temperature'] = orpheus_temperature
+        if fish_base_url:
+            kwargs['fish_base_url'] = fish_base_url
+        if fish_reference_id:
+            kwargs['fish_reference_id'] = fish_reference_id
         kwargs['post_process_tts'] = post_process_tts
         kwargs['post_process_intensity'] = post_process_intensity
 

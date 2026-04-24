@@ -108,6 +108,56 @@ def _dedup_repeated_words(text: str, max_repeats: int = 2) -> str:
     return ' '.join(result)
 
 
+def _is_fish_skippable(text: str, seg_start: float, seg_end: float,
+                       total_duration: float = 0.0,
+                       prev_end: float = 0.0) -> bool:
+    """Detect segments that Fish Speech S2-Pro will hallucinate on.
+
+    Returns True if the segment should be skipped for Fish Speech:
+    - Text is too short (< 3 words after cleaning)
+    - Segment follows a large silence gap (> 10s) with short text
+    - Segment is in the last 30s of the timeline with very short text
+    """
+    words = text.split()
+    word_count = len(words)
+
+    # Too few words — Fish hallucinates filler on <3 word inputs
+    if word_count < 3:
+        return True
+
+    # Large silence gap before this segment + short text = hallucination risk
+    gap_before = seg_start - prev_end
+    if gap_before > 10.0 and word_count < 6:
+        return True
+
+    # Last 30s of timeline with short text — end-of-stream hallucination
+    if total_duration > 0 and (total_duration - seg_end) < 30.0 and word_count < 5:
+        return True
+
+    return False
+
+
+def _validate_tts_duration(audio_samples: int, sample_rate: int,
+                           word_count: int, language: str = 'en') -> bool:
+    """Check if TTS output duration is reasonable for the input text.
+
+    Returns True if duration is plausible, False if likely hallucinated.
+    """
+    if audio_samples <= 0 or word_count <= 0:
+        return False
+
+    duration_s = audio_samples / sample_rate
+    # Speaking rates vary by language (words per second)
+    wps_slow = 1.5  # Very slow speaker
+    wps_fast = 5.0  # Very fast / compressed
+
+    min_expected = word_count / wps_fast
+    max_expected = word_count / wps_slow
+
+    # Allow 2x margin on both sides
+    return (duration_s >= min_expected * 0.5) and (duration_s <= max_expected * 2.0)
+
+
 def _clean_tts_text(text: str) -> str:
     """Strip non-speakable content from SRT text before TTS synthesis.
 

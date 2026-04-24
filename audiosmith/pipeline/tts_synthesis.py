@@ -86,7 +86,10 @@ class TTSSynthesisMixin:
         """Generate TTS audio for all segments."""
         import soundfile as sf
 
-        from audiosmith.pipeline.helpers import _clean_tts_text, _dedup_repeated_words
+        from audiosmith.pipeline.helpers import (
+            _clean_tts_text, _dedup_repeated_words,
+            _is_fish_skippable, _validate_tts_duration,
+        )
 
         tts_dir = Path(self.config.output_dir) / 'tts_segments'
         tts_dir.mkdir(parents=True, exist_ok=True)
@@ -96,16 +99,25 @@ class TTSSynthesisMixin:
             tts_engine_name = self._resolve_engine()
         prompt = str(self.config.audio_prompt_path) if self.config.audio_prompt_path else None
 
-        # Determine if this is Chatterbox with multi-voice features
+        # Total duration for edge-case detection (Fish Speech)
+        total_duration = segments[-1].end_time if segments else 0.0
+
+        # Model manager: only one engine in VRAM at a time, auto-swap on change
+        from audiosmith.tts_manager import TTSModelManager
+        tts_mgr = TTSModelManager()
+
+        # Initialize the primary engine (with voice cloning etc.)
         use_multi = False
         if tts_engine_name == 'chatterbox':
             engine, sample_rate, use_multi = self._init_chatterbox_engine(segments)
         elif tts_engine_name == 'fish':
             engine, sample_rate = self._init_fish_engine()
         else:
-            # Use factory for all other engines
             engine = self._create_engine_with_factory(tts_engine_name)
             sample_rate = engine.sample_rate
+
+        # Register the pre-configured engine with the manager
+        tts_mgr.register(tts_engine_name, engine)
 
         for seg in segments:
             text = seg.translated_text or seg.original_text
@@ -128,6 +140,17 @@ class TTSSynthesisMixin:
 
             # Collapse 3+ consecutive identical words to 2 (prevents TTS looping)
             text = _dedup_repeated_words(text)
+
+            # Fish Speech: skip segments likely to cause hallucination
+            if tts_engine_name == 'fish':
+                prev_end = segments[seg.index - 1].end_time if seg.index > 0 else 0.0
+                if _is_fish_skippable(text, seg.start_time, seg.end_time,
+                                      total_duration, prev_end):
+                    logger.info(
+                        "Skipping segment %d for Fish Speech (hallucination risk): '%s'",
+                        seg.index, text[:50],
+                    )
+                    continue
 
             try:
                 # Build engine-specific kwargs
@@ -154,6 +177,19 @@ class TTSSynthesisMixin:
                     audio, sr = engine.synthesize(text, **synth_kwargs)  # type: ignore[assignment]
                     wav = audio
                     sample_rate = sr
+
+                # Fish Speech: validate output duration isn't hallucinated
+                if tts_engine_name == 'fish':
+                    word_count = len(text.split())
+                    if not _validate_tts_duration(
+                        len(wav), sample_rate, word_count,
+                        self.config.target_language,
+                    ):
+                        logger.warning(
+                            "Segment %d: Fish TTS duration suspicious (%.1fs for %d words), skipping",
+                            seg.index, len(wav) / sample_rate, word_count,
+                        )
+                        continue
 
             except Exception as e:
                 logger.warning("TTS failed for segment %d, skipping: %s", seg.index, e)
@@ -185,10 +221,35 @@ class TTSSynthesisMixin:
             info = sf.info(str(wav_path))
             seg.tts_duration_ms = int(info.duration * 1000)
 
-        engine.cleanup() if hasattr(engine, 'cleanup') else None
-        if hasattr(engine, 'unload'):
-            engine.unload()
+        tts_mgr.cleanup()
         return segments
+
+    def _init_engine_on_demand(self, engine_name: str, tts_mgr: Any,
+                               segments: Optional[List[DubbingSegment]] = None) -> Tuple:
+        """Initialize and register a TTS engine on demand for hot-swap.
+
+        This enables per-segment engine routing: each segment can use
+        a different engine, and the manager handles VRAM swapping.
+
+        Returns:
+            Tuple of (engine, sample_rate, use_multi).
+        """
+        if engine_name in tts_mgr:
+            engine = tts_mgr.ensure_loaded(engine_name)
+            use_multi = False
+            return engine, engine.sample_rate, use_multi
+
+        use_multi = False
+        if engine_name == 'chatterbox':
+            engine, sample_rate, use_multi = self._init_chatterbox_engine(segments or [])
+        elif engine_name == 'fish':
+            engine, sample_rate = self._init_fish_engine()
+        else:
+            engine = self._create_engine_with_factory(engine_name)
+            sample_rate = engine.sample_rate
+
+        tts_mgr.register(engine_name, engine)
+        return engine, sample_rate, use_multi
 
     def _init_chatterbox_engine(self, segments: List[DubbingSegment]) -> Tuple:
         """Initialize Chatterbox TTS engine (single or multi-voice)."""
@@ -290,6 +351,21 @@ class TTSSynthesisMixin:
 
     def _init_fish_engine(self) -> Tuple:
         """Initialize Fish Speech TTS (cloud or local)."""
+        # Fish Speech: auto-enable cut-on-overlap (speedup degrades quality)
+        self.config.cut_on_overlap = True
+
+        # Auto-start local server if base_url is set
+        if self.config.fish_base_url:
+            from audiosmith.fish_server import FishServerManager
+            mgr = FishServerManager(base_url=self.config.fish_base_url)
+            if not mgr.ensure_running():
+                logger.warning(
+                    "Fish Speech server not available at %s — TTS may fail",
+                    self.config.fish_base_url,
+                )
+            # Store manager so it lives for the pipeline's duration
+            self._fish_server_mgr = mgr
+
         from audiosmith.fish_speech_tts import FishSpeechTTS
         engine = FishSpeechTTS(
             backend=self.config.fish_backend,

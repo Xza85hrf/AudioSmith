@@ -320,7 +320,11 @@ class DubbingPipeline(TTSSynthesisMixin):
         engine = getattr(self.config, 'tts_engine', 'piper')
         if engine in ('chatterbox', 'auto') and self.config.target_language not in self._QWEN3_LANGS:
             mixer.max_speedup = min(mixer.max_speedup, 1.3)
-        scheduled = mixer.schedule(segments)
+        # Use cut-on-overlap scheduler if enabled, otherwise default
+        if self.config.cut_on_overlap:
+            scheduled = mixer.schedule_cut_on_overlap(segments)
+        else:
+            scheduled = mixer.schedule(segments)
         out_path = Path(self.config.output_dir) / 'dubbed_audio.wav'
         mixer.render_to_file(scheduled, total_duration, out_path)
         return out_path, scheduled

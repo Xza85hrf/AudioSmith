@@ -25,7 +25,7 @@ Invoke: `Skill("name")` — skills do NOT auto-activate. Skill frontmatter: `arg
 ### Commands
 
 `.claude/commands/` — invoke with `/command-name`:
-`/health` `/monitor` `/validate` `/diagnose` `/sync` `/checkpoint` `/models` `/audit` `/workers` `/research` `/version-check` `/spawn` `/orchestrate` `/ollama-batch` `/context-save` `/context-restore` `/vault` `/embed` `/tokens` `/design-tokens` `/video` `/dashboard` `/events` `/observability` `/workflow` `/preflight` `/chrome-tasks` `/instincts` `/skill-factory` `/rebuild` `/init-project` `/launch-ollama` `/update-global` `/autodev` `/merge-dependabot` `/red-team` `/retro` `/ship` `/codex` `/integrity`
+`/health` `/monitor` `/validate` `/diagnose` `/sync` `/checkpoint` `/models` `/audit` `/workers` `/research` `/version-check` `/spawn` `/orchestrate` `/ollama-batch` `/context-save` `/context-restore` `/vault` `/embed` `/tokens` `/design-tokens` `/video` `/dashboard` `/events` `/observability` `/workflow` `/preflight` `/chrome-tasks` `/instincts` `/skill-factory` `/rebuild` `/init-project` `/launch-ollama` `/update-global` `/autodev` `/merge-dependabot` `/red-team` `/retro` `/ship` `/codex` `/integrity` `/security-harden`
 
 Native: `/loop` `/debug` `/effort` `/reload-plugins` `/copy` `/memory` `/simplify` `/rename` `/color` `/fork` `/stats` `/mcp` `/context`
 
@@ -38,16 +38,16 @@ Native: `/loop` `/debug` `/effort` `/reload-plugins` `/copy` `/memory` `/simplif
 <!-- KIT-STATS-START -->
 | Component | Count | Path |
 |-----------|-------|------|
-| Hooks | 91 across 21 events | `.claude/hooks/` |
-| Skills | 81 | `.claude/skills/` |
+| Hooks | 95 across 22 events | `.claude/hooks/` |
+| Skills | 82 | `.claude/skills/` |
 | Agents | 19 | `.claude/agents/` |
-| Commands | 40 | `.claude/commands/` |
-| Scripts | 124 | `.claude/scripts/` |
-| Rules | 19 | `.claude/rules/` |
+| Commands | 41 | `.claude/commands/` |
+| Scripts | 117 | `.claude/scripts/` |
+| Rules | 15 | `.claude/rules/` |
 | Team Presets | 4 | `.claude/team-presets/` |
 | Output Styles | 4 | `.claude/output-styles/` |
-| Config | 14 | `.claude/config/` |
-| Profiles | 9 / 62 / 91 (min/std/full) | `.claude/profiles/` |
+| Config | 13 | `.claude/config/` |
+| Profiles | 10 / 63 / 95 (min/std/full) | `.claude/profiles/` |
 <!-- KIT-STATS-END -->
 
 **Delegate first, code last.** You = brain; workers generate, you review. See @AGENTS.md for tiers, routing, models.
@@ -56,4 +56,4 @@ Native: `/loop` `/debug` `/effort` `/reload-plugins` `/copy` `/memory` `/simplif
 
 **MCP servers** — 14 in `~/.claude.json` (GLOBAL, not per-project). `disabledMcpServers` controls per-project loading. Never create `.mcp.json` files.
 
-Rules in `.claude/rules/` auto-load (19 files). Kit infrastructure: read `docs/DEVELOPMENT-GUIDE.md` before modifying hooks/skills/scripts/profiles.
+Rules in `.claude/rules/` auto-load (15 files). Kit infrastructure: read `docs/DEVELOPMENT-GUIDE.md` before modifying hooks/skills/scripts/profiles.

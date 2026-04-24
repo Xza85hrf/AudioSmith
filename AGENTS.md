@@ -4,33 +4,7 @@
 
 Orchestrator = brain (planner, final decisions). Workers = code generation, reviews, parallel tasks. The brain is whichever model runs Claude Code (Opus, GLM-5, etc.).
 
-### MCP Servers
-
-| Server | Role |
-|--------|------|
-| `memory` | Long-term memory |
-| `context7` (plugin) | Live library docs |
-| `ollama` | Worker pool (chat, generate, embed, web_search, web_fetch) |
-| `deepseek` | Second opinions |
-| `gemini` | Image gen, research, consultation |
-| `openai` | GPT-5.4/codex-mini audit, image gen |
-| `stitch` | Google Stitch — AI UI generation, mockup-to-code |
-| `21st-dev-magic` | 21st.dev — premium React components from natural language |
-| `github` | PRs, issues, code ops |
-| `playwright` | Browser automation, E2E testing |
-| `sequential-thinking` | Multi-step reasoning |
-| `animate-ui` | Animated shadcn/ui component registry — Motion + Tailwind + TypeScript |
-| `stripe` (disabled) | Payments, subscriptions, invoices |
-| `clerk` (disabled) | Auth SDK snippets, patterns |
-| `cloudflare-docs` (disabled) | Cloudflare documentation search |
-| `open-pencil` (optional) | Open-source Figma — .fig read/write, 87 AI tools, Tailwind JSX export. Add when desktop app running. |
-
-Disabled servers are configured in `~/.claude.json` but turned off per-project via `disabledMcpServers`. Enable with `/mcp` when needed.
-On-demand CLIs (not always-loaded): `cloudflare-docs.sh` (Cloudflare docs), `context-mode.sh` (FTS5 knowledge base), `openpencil` CLI (design file ops).
-
-**Local dev:** `slim` (slim.sh) — HTTPS local domains, path routing, public URL sharing. Not an MCP — direct CLI.
-
-IDE: `mcp__ide__getDiagnostics` (TS errors), `mcp__ide__executeCode` (Jupyter). LSP plugins: `typescript-lsp`, `pyright-lsp`, `gopls-lsp`, `rust-analyzer-lsp` (zero context cost).
+@.claude/reference/mcp-ecosystem.md
 
 ### Worker Models (Cloud-First)
 
@@ -57,55 +31,7 @@ Ollama Cloud runs on NVIDIA B300 data center hardware. Fixed pricing ($0/$20/$10
 | Codex Terminal Tasks | `codex exec --oss -m glm-5:cloud` (shell/DevOps/CLI) | `codex exec --oss -m qwen3.5:cloud` |
 <!-- MODEL-TABLE-END -->
 
-### Auto-Delegation
-
-<!-- DELEGATION-START -->
-```
-DELEGATE (MUST — cloud first):
-├── Multi-file impl → Tier 1: spawn-worker.sh "glm-5:cloud"
-├── Code gen >10 lines → Tier 2: ollama_chat glm-5:cloud
-├── Boilerplate/CRUD → Tier 2: gpt-oss:20b-cloud
-├── Code review → multi-model-audit.sh (includes Codex 5th voice)
-├── Plan review → codex exec --oss (second-opinion on architecture)
-├── Terminal/DevOps → codex exec --oss -m glm-5:cloud (shell, Makefile, CLI)
-├── Tests → Tier 1/2
-├── Reasoning → Tier 2: deepseek-v3.2:cloud
-├── Frontend design → Open Pencil (.fig) / Figma (cloud) → Stitch → 21st.dev → frontend-design-pro → workers
-├── Backend → Skill(backend-design) + workers + audit
-├── Security → Skill(security-review) + brain auth logic + worker support
-├── Refactoring → Skill(code-refactoring) + workers + audit
-├── Image → Gemini/OpenAI MCP
-├── Video → LTX-2 / Gemini
-├── Desktop app control → CLI-Anything (open-source apps) / Playwright (proprietary)
-├── Any non-tool task → Tier 1 (complex) or Tier 2 (simple)
-
-BRAIN KEEPS:
-├── Planning, architecture
-├── Security review (final pass)
-├── Multi-step tool orchestration
-├── Worker result integration
-├── User communication
-└── Tasks needing Claude Code tools
-```
-<!-- DELEGATION-END -->
-
-### Execution Tiers
-
-| Tier | Engine | Best For | Cost |
-|------|--------|----------|------|
-| 0 | Orchestrator (interactive) | Brain, security, orchestration | $$$ |
-| 1 | `claude -p` + Ollama | Multi-file impl, autonomous tasks | Free |
-| 2 | `ollama_chat` MCP | Quick code gen, reviews | Free |
-| 3 | Task tool (Haiku) | Exploration, Claude reasoning | $ |
-| 4 | Agent Teams | Collaborative, competing hypotheses | $$ |
-| 5 | Git Worktrees | Long-running branches | Free |
-| 6 | Codex CLI (`codex exec --oss`) | Plan review, terminal tasks, 5th audit voice | Free (Ollama) |
-
-### Smart Router
-
-Brain tools + reasoning? → Tier 0 | Complex multi-file? → Tier 1 | Simple gen? → Tier 2 | Claude reasoning? → Tier 3 | Coordination? → Tier 4 | Long-running? → Tier 5 | Plan review/terminal? → Tier 6
-
-Tier 1 = default for impl. Details: `.claude/rules/delegation.md`.
+Delegation, execution tiers, smart router: `.claude/rules/delegation.md`.
 
 @.claude/reference/ollama-launch.md
 
@@ -145,14 +71,7 @@ Team presets (`.claude/team-presets/`): `audit` (4 specialists), `debug` (3 hypo
 
 ## Cross-Session Continuity
 
-| File | Purpose |
-|------|---------|
-| `docs/project-state.md` | Branch, changes, health (auto-generated) |
-| `docs/decisions.md` | ADRs: `## ADR-XXX: [Title]` |
-| `docs/COSMOS.md` | Dashboard architecture, topology, Phase 2 roadmap |
-| `.claude/worker-performance.log` | Delegation outcomes |
-
-`Skill("daily-standup")` for session briefing.
+State: `docs/project-state.md` (auto), `docs/decisions.md` (ADRs), `.claude/worker-performance.log`. Session briefing: `Skill("daily-standup")`.
 
 @.claude/reference/turnstone.md
 

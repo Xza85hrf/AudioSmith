@@ -23,6 +23,7 @@ class AudioMixer:
         self.sample_rate = config.dubbed_sample_rate
         self.background_path = background_path
         self.allow_extended_timing = getattr(config, 'allow_extended_timing', False)
+        self.cut_on_overlap = getattr(config, 'cut_on_overlap', False)
 
     def schedule(self, segments: List[DubbingSegment]) -> List[ScheduledSegment]:
         """Build a schedule that keeps segments within their original time windows.
@@ -79,6 +80,45 @@ class AudioMixer:
                 actual_duration_ms=actual_dur,
             ))
             prev_end_ms = earliest_start + actual_dur
+
+        return scheduled
+
+    def schedule_cut_on_overlap(self, segments: List[DubbingSegment]) -> List[ScheduledSegment]:
+        """Schedule segments at natural speed, cutting when next segment starts.
+
+        Unlike the default scheduler which speeds up or truncates segments to
+        fit their subtitle time windows, this mode lets each segment play at
+        1.0x speed and only fades out when the next segment actually begins.
+        Better for engines like Fish Speech where speedup degrades quality.
+        """
+        scheduled: List[ScheduledSegment] = []
+
+        for seg in segments:
+            if seg.tts_audio_path is None or not seg.tts_duration_ms or seg.tts_duration_ms <= 0:
+                continue
+
+            orig_start_ms = int(seg.start_time * 1000)
+
+            scheduled.append(ScheduledSegment(
+                segment=seg,
+                place_at_ms=orig_start_ms,
+                speed_factor=1.0,
+                actual_duration_ms=seg.tts_duration_ms,
+            ))
+
+        # Second pass: trim earlier segment where next one starts
+        for i in range(len(scheduled) - 1):
+            curr = scheduled[i]
+            nxt = scheduled[i + 1]
+            curr_end_ms = curr.place_at_ms + curr.actual_duration_ms
+            if curr_end_ms > nxt.place_at_ms:
+                trimmed = max(nxt.place_at_ms - curr.place_at_ms, 0)
+                if trimmed < curr.actual_duration_ms:
+                    logger.debug(
+                        "Cut-on-overlap: segment %d trimmed %dms → %dms (next starts at %dms)",
+                        curr.segment.index, curr.actual_duration_ms, trimmed, nxt.place_at_ms,
+                    )
+                curr.actual_duration_ms = trimmed
 
         return scheduled
 

@@ -75,6 +75,7 @@ class DubbingConfig:
     external_srt_path: Optional[Path] = None  # Skip translation, use official SRT
     use_srt_timing: bool = False  # Use SRT timing directly (recommended for high-quality SRT)
     allow_extended_timing: bool = False  # Allow segments to extend past original end
+    cut_on_overlap: bool = False  # Cut-on-new-segment: no speedup, fade at next segment start
 
 
 @dataclass
