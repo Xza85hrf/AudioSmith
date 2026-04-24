@@ -63,8 +63,11 @@ pip install -e ".[all]"       # Everything above
 | `check` | System pre-flight checks (FFmpeg, CUDA, disk space) |
 | `info` | Show system info, available engines, and capabilities |
 | `voices` | Browse available voices across all TTS engines |
-| `train-data-gen` | Generate training data for F5-TTS fine-tuning (paired text+audio) |
-| `train-f5` | Fine-tune F5-TTS for custom voices |
+
+> **Note:** F5-TTS fine-tuning (`train-data-gen`, `train-f5`) is not yet
+> exposed as an AudioSmith CLI command. `audiosmith/f5_finetune.py` is a
+> deprecated re-export of `aiml_training.training.f5_finetune`; use
+> `aiml_training` directly for fine-tuning workflows.
 
 ## Quick Start
 
@@ -204,7 +207,8 @@ pip install -e ".[dev]"
 python -m pytest tests/ -v
 ```
 
-402 unit tests, ~2s runtime, no GPU required.
+Over 1000 unit tests across `tests/`, no GPU required for the vast
+majority. Run `python -m pytest tests/ -v` for the full suite.
 
 ## License
 
